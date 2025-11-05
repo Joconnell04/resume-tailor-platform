@@ -1,12 +1,16 @@
 """
 Frontend views for tailoring app.
 """
+import logging
 from copy import deepcopy
+from datetime import timedelta
 
+from celery.exceptions import OperationalError as CeleryOperationalError
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
-from celery.exceptions import OperationalError as CeleryOperationalError
+from django.utils import timezone
 from kombu.exceptions import OperationalError as KombuOperationalError
 
 from experience.models import ExperienceGraph
@@ -15,19 +19,31 @@ from .models import TailoringSession
 from .services import AgentKitTailoringService
 from .tasks import process_tailoring_session
 
+logger = logging.getLogger(__name__)
+
 
 @login_required
 def tailoring_list(request):
     """List all tailoring sessions for the user."""
-    sessions = TailoringSession.objects.filter(user=request.user).order_by('-created_at')
-    context = {'sessions': sessions}
-    return render(request, 'tailoring/list.html', context)
+    sessions = list(
+        TailoringSession.objects.filter(user=request.user).order_by('-created_at')
+    )
+
+    refreshed = []
+    for session in sessions:
+        if _rescue_stuck_session(session):
+            session.refresh_from_db()
+        refreshed.append(session)
+
+    return render(request, 'tailoring/list.html', {'sessions': refreshed})
 
 
 @login_required
 def tailoring_detail(request, session_id):
     """Display tailoring session details."""
     session = get_object_or_404(TailoringSession, id=session_id, user=request.user)
+    if _rescue_stuck_session(session):
+        session.refresh_from_db()
     context = {'session': session}
     return render(request, 'tailoring/detail.html', context)
 
@@ -126,6 +142,12 @@ def tailoring_create(request):
                 request,
                 'Background queue unavailable, so tailoring ran immediately.'
             )
+        except Exception as exc:  # noqa: BLE001
+            _mark_session_failed(session, f'Failed to dispatch tailoring task: {exc}')
+            messages.error(
+                request,
+                'We could not start the tailoring run. Please try again shortly.'
+            )
         return redirect('tailoring_detail', session_id=session.id)
     
     default_parameters = AgentKitTailoringService.normalize_parameters(
@@ -140,3 +162,78 @@ def tailoring_create(request):
         'default_sections_text': default_sections_text,
     }
     return render(request, 'tailoring/create.html', context)
+
+
+def _rescue_stuck_session(session: TailoringSession) -> bool:
+    """
+    Detect pending/processing sessions that exceeded their SLA and attempt recovery.
+    Returns True if the session was mutated.
+    """
+    now = timezone.now()
+    mutated = False
+
+    pending_timeout = timedelta(minutes=settings.TAILORING_PENDING_TIMEOUT_MINUTES)
+    processing_timeout = timedelta(minutes=settings.TAILORING_PROCESSING_TIMEOUT_MINUTES)
+
+    if (
+        session.status == TailoringSession.Status.PENDING
+        and now - session.created_at > pending_timeout
+    ):
+        try:
+            logger.warning(
+                "Re-attempting stale tailoring session %s for user %s",
+                session.id,
+                session.user_id,
+            )
+            process_tailoring_session.apply(args=(session.id,), throw=True)
+            mutated = True
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Tailoring session %s failed to start: %s", session.id, exc)
+            _mark_session_failed(
+                session,
+                "Session could not start in time. Please retry.",
+                append_debug=str(exc),
+            )
+            mutated = True
+
+    elif (
+        session.status == TailoringSession.Status.PROCESSING
+        and now - session.updated_at > processing_timeout
+    ):
+        logger.error(
+            "Tailoring session %s exceeded processing timeout.", session.id
+        )
+        _mark_session_failed(
+            session,
+            "Session exceeded the processing time limit. Please try again.",
+        )
+        mutated = True
+
+    return mutated
+
+
+def _mark_session_failed(
+    session: TailoringSession,
+    message: str,
+    *,
+    append_debug: str | None = None,
+) -> None:
+    """
+    Persist failure state and audit message to a session.
+    """
+    session.status = TailoringSession.Status.FAILED
+    session.error_message = message
+    session.completed_at = timezone.now()
+    if append_debug:
+        debug_log = session.debug_log or ""
+        debug_log += f"\n[{session.completed_at.isoformat()}] {append_debug}"
+        session.debug_log = debug_log.strip()
+    session.save(
+        update_fields=[
+            'status',
+            'error_message',
+            'completed_at',
+            'debug_log',
+            'updated_at',
+        ]
+    )

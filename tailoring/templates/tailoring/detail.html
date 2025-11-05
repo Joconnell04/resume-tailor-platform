@@ -176,7 +176,7 @@
     </div>
     {% endif %}
 
-    {% if session.status in ('PENDING', 'PROCESSING') %}
+    {% if session.status == 'PENDING' or session.status == 'PROCESSING' %}
     <div class="card mt-2">
         <div class="card-body">
             <p class="text-warning">

@@ -77,6 +77,8 @@ python manage.py test
 - Token usage and word counts are recorded back onto the user for quota tracking.
 - Session detail page shows statuses, run IDs, token stats, generated content, and a collapsible debug log for troubleshooting.
 - If Redis isn’t running when you kick off a session, the view falls back to executing the task synchronously and lets you know with a banner.
+- Status badges expect uppercase strings (`PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`), so keep enum values in sync with the model.
+- Sessions that sit in `PENDING` longer than the configured timeout automatically retry or get marked failed with a clear message; `PROCESSING` sessions get the same treatment if they exceed their window.
 
 ### Dashboard + profiles
 - Dashboard pulls recent jobs, tailoring sessions, and token counts.
@@ -100,6 +102,8 @@ OPENAI_API_KEY=sk-...
 OPENAI_MODEL=gpt-4.1-mini
 CELERY_BROKER_URL=redis://127.0.0.1:6379/0
 CELERY_RESULT_BACKEND=redis://127.0.0.1:6379/0
+TAILORING_PENDING_TIMEOUT_MINUTES=5
+TAILORING_PROCESSING_TIMEOUT_MINUTES=15
 MAPBOX_TOKEN=optional
 LOG_LEVEL=INFO
 ```
