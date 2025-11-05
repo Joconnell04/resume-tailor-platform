@@ -1,0 +1,133 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit{% else %}Add{% endif %} Experience | MyApply{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}Add{% endif %} Experience</h1>
+</div>
+
+<form method="post" class="experience-form">
+    {% csrf_token %}
+    
+    <div class="form-group">
+        <label for="type" class="form-label">Experience Type *</label>
+        <select name="type" id="type" class="form-select" required>
+            <option value="">Select type...</option>
+            <option value="work" {% if form_data.type == 'work' %}selected{% endif %}>Work Experience</option>
+            <option value="education" {% if form_data.type == 'education' %}selected{% endif %}>Education</option>
+            <option value="project" {% if form_data.type == 'project' %}selected{% endif %}>Project</option>
+            <option value="volunteer" {% if form_data.type == 'volunteer' %}selected{% endif %}>Volunteer</option>
+        </select>
+    </div>
+
+    <div class="form-row">
+        <div class="form-group">
+            <label for="title" class="form-label">Title / Position *</label>
+            <input type="text" name="title" id="title" class="form-input" 
+                   value="{{ form_data.title|default:'' }}" required
+                   placeholder="e.g., Senior Software Engineer">
+        </div>
+
+        <div class="form-group">
+            <label for="organization" class="form-label">Organization *</label>
+            <input type="text" name="organization" id="organization" class="form-input" 
+                   value="{{ form_data.organization|default:'' }}" required
+                   placeholder="e.g., Google">
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label for="location" class="form-label">Location</label>
+        <input type="text" name="location" id="location" class="form-input" 
+               value="{{ form_data.location|default:'' }}"
+               placeholder="e.g., San Francisco, CA">
+    </div>
+
+    <div class="form-row">
+        <div class="form-group">
+            <label for="start_date" class="form-label">Start Date</label>
+            <input type="month" name="start_date" id="start_date" class="form-input" 
+                   value="{{ form_data.start_date|default:'' }}">
+        </div>
+
+        <div class="form-group">
+            <label for="end_date" class="form-label">End Date</label>
+            <input type="month" name="end_date" id="end_date" class="form-input" 
+                   value="{{ form_data.end_date|default:'' }}"
+                   {% if form_data.current %}disabled{% endif %}>
+        </div>
+    </div>
+
+    <div class="form-checkbox-group">
+        <input type="checkbox" name="current" id="current" class="form-checkbox"
+               {% if form_data.current %}checked{% endif %}
+               onchange="document.getElementById('end_date').disabled = this.checked; if(this.checked) document.getElementById('end_date').value = '';">
+        <label for="current" class="form-label">I currently work/study here</label>
+    </div>
+
+    <div class="form-group">
+        <label for="description" class="form-label">Description</label>
+        <textarea name="description" id="description" class="form-textarea" 
+                  rows="4" placeholder="Describe your role and responsibilities...">{{ form_data.description|default:'' }}</textarea>
+    </div>
+
+    <div class="form-group">
+        <label for="skills" class="form-label">Skills (comma-separated)</label>
+        <input type="text" name="skills" id="skills" class="form-input" 
+               value="{% if form_data.skills %}{{ form_data.skills|join:', ' }}{% endif %}"
+               placeholder="e.g., Python, Django, React, AWS">
+        <small class="text-muted">Separate skills with commas</small>
+    </div>
+
+    <div class="form-group">
+        <label class="form-label">Key Achievements</label>
+        <div id="achievements-container">
+            {% if form_data.achievements %}
+                {% for achievement in form_data.achievements %}
+                <div class="achievement-input">
+                    <input type="text" name="achievements[]" class="form-input" 
+                           value="{{ achievement }}"
+                           placeholder="Describe a key achievement...">
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="achievement-input">
+                    <input type="text" name="achievements[]" class="form-input" 
+                           placeholder="Describe a key achievement...">
+                </div>
+            {% endif %}
+        </div>
+        <button type="button" class="btn-add-achievement" onclick="addAchievement()">+ Add Achievement</button>
+    </div>
+
+    <div class="form-actions">
+        <a href="{% url 'experience:list' %}" class="btn">Cancel</a>
+        <button type="submit" class="btn btn-primary">{% if is_edit %}Update{% else %}Add{% endif %} Experience</button>
+    </div>
+</form>
+
+<script>
+function addAchievement() {
+    const container = document.getElementById('achievements-container');
+    const div = document.createElement('div');
+    div.className = 'achievement-input';
+    div.innerHTML = `
+        <input type="text" name="achievements[]" class="form-input" 
+               placeholder="Describe a key achievement...">
+    `;
+    container.appendChild(div);
+}
+
+// Remove empty achievement fields on submit
+document.querySelector('form').addEventListener('submit', function(e) {
+    const inputs = document.querySelectorAll('input[name="achievements[]"]');
+    inputs.forEach(input => {
+        if (!input.value.trim()) {
+            input.remove();
+        }
+    });
+});
+</script>
+{% endblock %}
