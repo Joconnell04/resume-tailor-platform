@@ -349,9 +349,60 @@ Never commit `.env` file. Set variables in:
 - [ ] Regular backup of database
 - [ ] Monitor token usage and set reasonable quotas
 
+## Quick Reference
+
+### Server Info
+- **URL**: http://127.0.0.1:8000/
+- **Admin**: http://127.0.0.1:8000/admin/
+- **API Root**: http://127.0.0.1:8000/api/
+
+### Development Commands
+```bash
+# Start server
+python manage.py runserver
+
+# Create migrations
+python manage.py makemigrations
+
+# Apply migrations
+python manage.py migrate
+
+# Create superuser
+python manage.py createsuperuser
+
+# Django shell
+python manage.py shell
+```
+
+### Quick Debugging
+```bash
+# Check if port 8000 is in use
+lsof -ti:8000 | xargs kill -9
+
+# Try different port
+python manage.py runserver 8001
+
+# Reset database (SQLite only)
+rm db.sqlite3
+python manage.py migrate
+python manage.py createsuperuser
+```
+
+## Implementation Status
+
+- ✅ **Enhanced .gitignore** - Comprehensive Python/Django patterns
+- ✅ **MySQL Configuration** - Environment variable support
+- ✅ **Database Migrations** - All tables created including accounts_user
+- ✅ **AgentKit Service** - Expanded with implementation guide and helpers
+- 🚧 **OpenAI Integration** - Needs OPENAI_API_KEY and implementation
+- 🚧 **Mapbox Integration** - Needs MAPBOX_TOKEN and implementation
+- 🚧 **URL Scraping** - Install beautifulsoup4 and implement
+
 ## Support Resources
 
 - Django Docs: https://docs.djangoproject.com/
 - DRF Docs: https://www.django-rest-framework.org/
 - OpenAI API: https://platform.openai.com/docs/
 - Mapbox API: https://docs.mapbox.com/
+
+````

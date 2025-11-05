@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+
+{% block title %}Jobs - MyApply{% endblock %}
+
+{% block content %}
+<div class="jobs-page">
+    <div class="card-header">
+        <h1 class="card-title">
+            <span class="prompt">$</span> jobs --list
+        </h1>
+        <a href="{% url 'job_create' %}" class="btn btn-primary">+ Add Job</a>
+    </div>
+
+    {% if jobs %}
+    <div class="card mt-2">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Title</th>
+                    <th>Company</th>
+                    <th>Location</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for job in jobs %}
+                <tr>
+                    <td><strong>{{ job.title }}</strong></td>
+                    <td>{{ job.company }}</td>
+                    <td>{{ job.location_text|default:"N/A" }}</td>
+                    <td>{{ job.created_at|date:"M d, Y" }}</td>
+                    <td>
+                        <a href="{% url 'job_detail' job.id %}" class="btn btn-small">View</a>
+                        <a href="{% url 'job_edit' job.id %}" class="btn btn-small">Edit</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="card mt-2">
+        <div class="card-body">
+            <p class="text-muted mb-1">No jobs tracked yet.</p>
+            <a href="{% url 'job_create' %}" class="btn btn-primary">+ Track Your First Job</a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

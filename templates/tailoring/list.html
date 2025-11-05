@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+
+{% block title %}Tailoring Sessions - MyApply{% endblock %}
+
+{% block content %}
+<div class="tailoring-page">
+    <div class="card-header">
+        <h1 class="card-title">
+            <span class="prompt">$</span> tailoring --list
+        </h1>
+        <a href="{% url 'tailoring_create' %}" class="btn btn-primary">+ New Session</a>
+    </div>
+
+    {% if sessions %}
+    <div class="card mt-2">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Job Title</th>
+                    <th>Company</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for session in sessions %}
+                <tr>
+                    <td><strong>{{ session.job.title }}</strong></td>
+                    <td>{{ session.job.company }}</td>
+                    <td>
+                        {% if session.status == 'completed' %}
+                        <span class="tag tag-success">{{ session.status }}</span>
+                        {% elif session.status == 'failed' %}
+                        <span class="tag tag-error">{{ session.status }}</span>
+                        {% elif session.status == 'processing' %}
+                        <span class="tag tag-warning">{{ session.status }}</span>
+                        {% else %}
+                        <span class="tag">{{ session.status }}</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ session.created_at|date:"M d, Y" }}</td>
+                    <td>
+                        <a href="{% url 'tailoring_detail' session.id %}" class="btn btn-small">View</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="card mt-2">
+        <div class="card-body">
+            <p class="text-muted mb-1">No tailoring sessions yet.</p>
+            <a href="{% url 'tailoring_create' %}" class="btn btn-primary">+ Start Your First Session</a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

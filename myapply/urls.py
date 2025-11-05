@@ -12,6 +12,7 @@ from accounts.views import UserViewSet
 from profiles.views import JobSeekerProfileViewSet
 from jobs.views import JobPostingViewSet
 from tailoring.views import TailoringSessionViewSet
+from myapply.views import login_view, logout_view, dashboard
 
 # Create router and register viewsets
 router = DefaultRouter()
@@ -21,6 +22,16 @@ router.register(r'jobs', JobPostingViewSet, basename='job')
 router.register(r'tailoring', TailoringSessionViewSet, basename='tailoring')
 
 urlpatterns = [
+    # Frontend views
+    path('', dashboard, name='dashboard'),
+    path('login/', login_view, name='login'),
+    path('logout/', logout_view, name='logout'),
+    path('experience/', include('experience.frontend_urls')),
+    path('jobs/', include('jobs.frontend_urls')),
+    path('tailoring/', include('tailoring.frontend_urls')),
+    path('profile/', include('profiles.frontend_urls')),
+    
+    # API views
     path('admin/', admin.site.urls),
     path('api/', include(router.urls)),
     path('api/experience/', include('experience.urls')),

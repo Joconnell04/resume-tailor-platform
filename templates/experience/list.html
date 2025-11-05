@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+
+{% block title %}Experience Graph - MyApply{% endblock %}
+
+{% block content %}
+<div class="experience-page">
+    <div class="card-header">
+        <h1 class="card-title">
+            <span class="prompt">$</span> experience --show
+        </h1>
+        <div>
+            {% if experience %}
+            <a href="{% url 'experience_edit' %}" class="btn btn-primary">Edit</a>
+            {% else %}
+            <a href="{% url 'experience_create' %}" class="btn btn-primary">Create</a>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if experience %}
+    <div class="card mt-2">
+        <div class="card-header">
+            <h2 class="card-title">Your Experience Graph</h2>
+            <span class="text-muted">Last updated: {{ experience.updated_at|date:"M d, Y H:i" }}</span>
+        </div>
+        <div class="card-body">
+            {% if graph_data %}
+            <div class="code-block">
+                <pre>{{ graph_data }}</pre>
+            </div>
+            {% else %}
+            <p class="text-muted">No experience data.</p>
+            {% endif %}
+        </div>
+    </div>
+    {% else %}
+    <div class="card mt-2">
+        <div class="card-body">
+            <p class="text-muted mb-1">No experience graph found.</p>
+            <a href="{% url 'experience_create' %}" class="btn btn-primary">Create Experience Graph</a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

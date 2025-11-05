@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+
+{% block title %}Edit Job - MyApply{% endblock %}
+
+{% block content %}
+<div class="job-edit">
+    <h1 class="card-title mb-2">
+        <span class="prompt">$</span> job --edit --id={{ job.id }}
+    </h1>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Edit Job</h2>
+        </div>
+        <div class="card-body">
+            <form method="post">
+                {% csrf_token %}
+                
+                <div class="form-group">
+                    <label class="form-label" for="title">Job Title *</label>
+                    <input type="text" name="title" id="title" class="form-input" value="{{ job.title }}" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="company">Company *</label>
+                    <input type="text" name="company" id="company" class="form-input" value="{{ job.company }}" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="location_text">Location</label>
+                    <input type="text" name="location_text" id="location_text" class="form-input" value="{{ job.location_text }}">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="url">Job URL</label>
+                    <input type="url" name="url" id="url" class="form-input" value="{{ job.url }}">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="raw_description">Job Description *</label>
+                    <textarea name="raw_description" id="raw_description" class="form-textarea" rows="15" required>{{ job.raw_description }}</textarea>
+                </div>
+
+                <div class="form-group">
+                    <button type="submit" class="btn btn-primary">Update Job</button>
+                    <a href="{% url 'job_detail' job.id %}" class="btn">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
