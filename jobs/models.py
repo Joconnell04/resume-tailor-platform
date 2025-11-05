@@ -28,8 +28,11 @@ class JobPosting(models.Model):
     source_url = models.URLField(blank=True)
     raw_description = models.TextField(blank=True)
     location_text = models.CharField(max_length=255, blank=True)
+    parsed_requirements = models.JSONField(default=dict, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
     
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     
     def __str__(self):
         title = self.title or "Untitled Job"

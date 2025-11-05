@@ -32,9 +32,36 @@ class User(AbstractUser):
     )
     token_quota = models.IntegerField(default=1000)
     tokens_used = models.IntegerField(default=0)
-    
+    words_used = models.IntegerField(default=0)
+
     def __str__(self):
         return f"{self.username} ({self.role})"
+
+    @property
+    def tokens_available(self) -> int:
+        """
+        Remaining token balance for AI operations.
+        """
+        return max(self.token_quota - self.tokens_used, 0)
+
+    def record_usage(self, *, tokens: int = 0, words: int = 0) -> None:
+        """
+        Persist usage information after an AI request.
+
+        Args:
+            tokens: Number of tokens consumed by the request.
+            words: Number of user-facing words generated/submitted.
+        """
+        update_fields = []
+        if tokens > 0:
+            self.tokens_used = models.F("tokens_used") + tokens
+            update_fields.append("tokens_used")
+        if words > 0:
+            self.words_used = models.F("words_used") + words
+            update_fields.append("words_used")
+        if update_fields:
+            self.save(update_fields=update_fields)
+            self.refresh_from_db(fields=update_fields)
     
     class Meta:
         verbose_name = 'User'

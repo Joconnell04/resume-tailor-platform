@@ -1,298 +1,113 @@
-# MyApply - Resume Tailoring Platform
+# MyApply Resume Tailor
 
-A Django-based platform for parsing job descriptions, matching ATS keywords, and leveraging OpenAI to generate tailored resume bullets based on a user's experience graph.
+This is the class project where I’m building a lightweight resume tailoring portal on top of Django. Job seekers can track roles they’re interested in, store a structured "experience graph," and run an OpenAI-powered workflow that spits out tailored resume bullets. Everything runs against MySQL and a Celery worker so the browser never blocks while OpenAI does its thing.
 
-## Features
+## What lives in each app?
 
-- **Custom User Management** - Role-based authentication with token quotas
-- **Experience Graphs** - JSON-based storage of work history and skills
-- **Job Tracking** - Parse and store job descriptions
-- **AI-Powered Tailoring** - OpenAI integration for resume optimization (stub ready)
-- **Location Services** - Mapbox integration for commute calculations (stub ready)
-- **REST API** - Full CRUD operations with Django REST Framework
-- **Web Interface** - Dark blue themed frontend with smooth animations
+- **accounts** – custom `User` model with roles plus token/word usage counters so I can rate-limit OpenAI consumption.
+- **profiles** – simple CRUD for the user’s personal info and links that end up on the resume preview.
+- **experience** – the “experience graph” manager. Users edit job, project, education, and volunteer entries through well-validated forms that write to JSON in MySQL. Sorting, validation, and conversions all live in `experience/services.py`.
+- **jobs** – lets a user paste a job description, drop a posting URL, or do both. Stores parsing metadata so the tailoring service can reuse it.
+- **tailoring** – asynchronous pipeline: snapshots the job + experience data, enqueues a Celery task, calls the OpenAI Responses API, and stores the generated bullets/sections/suggestions with debug logs.
+- **maps** – placeholder for Mapbox commute calculations (API key wiring is already in settings but the feature is still a stub).
+- **myapply** – the project config plus shared templates (`base.html`, dashboard, login) and Celery bootstrap.
 
-## Tech Stack
+## Stack + infrastructure
 
-- Django 5.2.6
-- Django REST Framework 3.16.1
-- MySQL
-- OpenAI API (integration ready)
-- Mapbox API (integration ready)
+- **Backend**: Django 4.2, Python 3.10+, Django REST Framework for the API, Celery 5 with Redis for background jobs.
+- **Database**: MySQL only. There’s no SQLite fallback anywhere, so make sure you have a running MySQL 8 instance for dev and tests.
+- **AI**: OpenAI Responses API (model defaults to `gpt-4.1-mini`). The service handles prompt building, requirement extraction, and output parsing.
+- **Other services**: Redis (broker + result backend), optional Mapbox token waiting for the maps feature.
+- **Frontend**: Django template system with all templates scoped to each app, plus a shared CSS file in `static/css/style.css`.
 
-## Prerequisites
+## Local setup
 
-- Python 3.8+
-- MySQL 8.0+
-- pip package manager
-
-## Quick Start
-
-### 1. Install Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-Required packages:
-- Django
-- djangorestframework
-- mysqlclient
-- requests
-
-### 2. Configure MySQL Database
-
-**PythonAnywhere:**
-1. Go to Databases tab
-2. Create MySQL database: `username$myapply`
-3. Note hostname: `username.mysql.pythonanywhere-services.com`
-
-**Local MySQL:**
-```bash
-# Install MySQL
-brew install mysql  # macOS
-sudo apt-get install mysql-server  # Ubuntu
-
-# Start MySQL
-brew services start mysql  # macOS
-sudo systemctl start mysql  # Ubuntu
-
-# Create database
-mysql -u root -p
-```
-
-```sql
-CREATE DATABASE myapply CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'myapply_user'@'localhost' IDENTIFIED BY 'secure_password';
-GRANT ALL PRIVILEGES ON myapply.* TO 'myapply_user'@'localhost';
-FLUSH PRIVILEGES;
-EXIT;
-```
-
-### 3. Set Environment Variables
-
-Create `.env` file:
-```env
-DJANGO_SECRET_KEY=your-secret-key-here
-DEBUG=True
-DB_NAME=myapply
-DB_USER=myapply_user
-DB_PASSWORD=your_password
-DB_HOST=localhost
-DB_PORT=3306
-OPENAI_API_KEY=sk-your-openai-key
-MAPBOX_TOKEN=pk-your-mapbox-token
-```
-
-**PythonAnywhere format:**
-```env
-DB_NAME=username$myapply
-DB_USER=username
-DB_HOST=username.mysql.pythonanywhere-services.com
-```
-
-### 4. Run Migrations
-
-```bash
-python manage.py makemigrations
-python manage.py migrate
-```
-
-### 5. Create Superuser
-
-```bash
-python manage.py createsuperuser
-```
-
-### 6. Start Server
-
-```bash
-python manage.py runserver
-```
-
-Visit:
-- Frontend: http://127.0.0.1:8000/
-- Admin: http://127.0.0.1:8000/admin/
-- API: http://127.0.0.1:8000/api/
-
-## Project Structure
-
-```
-resume-tailor-platform/
-├── accounts/          # User management & authentication
-├── profiles/          # Job seeker profiles
-├── experience/        # Experience graph storage
-├── jobs/             # Job posting management
-├── tailoring/        # AI tailoring service
-├── maps/             # Location/commute services
-├── templates/        # Frontend HTML templates
-├── static/           # CSS, JavaScript, images
-└── myapply/          # Django project settings
-```
-
-## API Endpoints
-
-### Authentication
-- `POST /api-auth/login/` - Login
-- `GET /api/users/me/` - Current user info
-
-### Experience
-- `GET /api/experience/` - Get experience graph
-- `PUT /api/experience/` - Update experience graph
-
-### Jobs
-- `GET /api/jobs/` - List jobs
-- `POST /api/jobs/` - Create job
-- `GET /api/jobs/{id}/` - Job details
-- `PUT /api/jobs/{id}/` - Update job
-- `DELETE /api/jobs/{id}/` - Delete job
-
-### Tailoring
-- `GET /api/tailoring/` - List sessions
-- `POST /api/tailoring/` - Create session
-- `GET /api/tailoring/{id}/` - Session details
-
-### Profiles
-- `GET /api/profiles/` - Get profile
-- `POST /api/profiles/` - Create profile
-- `PUT /api/profiles/{id}/` - Update profile
-
-## Development Workflow
-
-```bash
-# Make model changes
-# Edit models.py files
-
-# Create migrations
-python manage.py makemigrations
-
-# Apply migrations
-python manage.py migrate
-
-# Run tests
-python manage.py test
-
-# Django shell
-python manage.py shell
-```
-
-## PythonAnywhere Deployment
-
-1. **Upload Code**
-   - Use Git: `git clone https://github.com/yourusername/resume-tailor-platform.git`
-   - Or use Files tab to upload
-
-2. **Create Virtual Environment**
-   ```bash
-   mkvirtualenv myapply --python=python3.10
-   ```
-
-3. **Install Dependencies**
+1. Clone the repo and create a virtualenv.
+2. Install dependencies:
    ```bash
    pip install -r requirements.txt
    ```
-
-4. **Setup MySQL Database**
-   - Create database in Databases tab
-   - Note connection details
-
-5. **Configure Environment**
-   - Edit WSGI file to include environment variables
-   - Or use virtualenv postactivate hook
-
-6. **Run Migrations**
+3. Make sure MySQL is running and create a database/user. For example:
+   ```sql
+   CREATE DATABASE myapply CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+   CREATE USER 'myapply_user'@'localhost' IDENTIFIED BY 'choose_a_password';
+   GRANT ALL PRIVILEGES ON myapply.* TO 'myapply_user'@'localhost';
+   FLUSH PRIVILEGES;
+   ```
+4. Copy `.env.example` to `.env` and fill in the blanks for `DJANGO_SECRET_KEY`, MySQL creds, `OPENAI_API_KEY`, `OPENAI_MODEL`, and the Redis URLs. No SQLite settings are honored, so leave those out.
+5. Run migrations and create a superuser:
    ```bash
    python manage.py migrate
    python manage.py createsuperuser
    ```
-
-7. **Collect Static Files**
+6. Start Redis (local default is fine):
    ```bash
-   python manage.py collectstatic
+   redis-server
    ```
+7. In separate terminals, launch Celery and Django:
+   ```bash
+   celery -A myapply worker -l info
+   python manage.py runserver
+   ```
+8. Visit `http://127.0.0.1:8000/`, log in, and you’re set.
 
-8. **Configure Web App**
-   - Set source code path
-   - Set WSGI file path: `/path/to/myapply/wsgi.py`
-   - Set static files: `/static/` → `/path/to/static/`
-   - Reload web app
+### Running tests
 
-## Environment Variables (Production)
-
-Add to PythonAnywhere WSGI file:
-```python
-import os
-os.environ['DJANGO_SECRET_KEY'] = 'your-secret-key'
-os.environ['DEBUG'] = 'False'
-os.environ['DB_NAME'] = 'username$myapply'
-os.environ['DB_USER'] = 'username'
-os.environ['DB_PASSWORD'] = 'your-password'
-os.environ['DB_HOST'] = 'username.mysql.pythonanywhere-services.com'
-os.environ['OPENAI_API_KEY'] = 'sk-your-key'
-os.environ['MAPBOX_TOKEN'] = 'pk-your-token'
-```
-
-## Security Checklist
-
-- [ ] Change `DJANGO_SECRET_KEY` in production
-- [ ] Set `DEBUG=False` in production
-- [ ] Configure `ALLOWED_HOSTS` in settings.py
-- [ ] Use environment variables for secrets
-- [ ] Enable HTTPS
-- [ ] Regular database backups
-- [ ] Monitor token usage
-
-## Implementation Status
-
-- ✅ Django project structure
-- ✅ MySQL database configuration
-- ✅ User authentication & authorization
-- ✅ REST API endpoints
-- ✅ Frontend with dark blue theme
-- ✅ Admin interface
-- 🚧 OpenAI integration (stub ready in `tailoring/services.py`)
-- 🚧 Mapbox integration (stub ready in `maps/services.py`)
-- 🚧 URL scraping for job descriptions
-
-## Troubleshooting
-
-**MySQL Connection Error:**
-- Verify credentials in `.env`
-- Check MySQL is running: `brew services list` or `sudo systemctl status mysql`
-- Test connection: `mysql -u username -p -h hostname`
-
-**mysqlclient Installation Fails:**
+Tests expect a reachable MySQL database and any required env vars. Run everything with:
 ```bash
-# macOS
-brew install mysql pkg-config
-pip install mysqlclient
-
-# Ubuntu
-sudo apt-get install python3-dev default-libmysqlclient-dev build-essential
-pip install mysqlclient
+python manage.py test
 ```
 
-**Port 8000 Already in Use:**
-```bash
-lsof -ti:8000 | xargs kill -9
+## Feature highlights
+
+### Experience manager
+- Four supported types (work, education, project, volunteer) with validation baked into `ExperienceService`.
+- Glassmorphism card UI, dynamic achievements, and comma-separated skill tags.
+- Everything saved to the `ExperienceGraph` JSON field, sorted and sanitized before it touches MySQL.
+- When a location is provided (and `MAPBOX_TOKEN` is set) the service forward-geocodes it with Mapbox and stores latitude/longitude for future isochrone calculations.
+
+### Job tracking
+- Single form that accepts a posting URL, raw description text, or both.
+- Metadata fields (company, location, parsed_requirements, etc.) live on the `JobPosting` model, so the tailoring task can reuse them without re-scraping.
+
+### Tailoring workflow
+- Creates a `TailoringSession` with snapshots of the job data and the user’s experience graph.
+- Users choose sections, tone, bullet counts, and whether to include summaries or cover letters before submitting.
+- Celery task scrapes the URL (if provided), merges content, builds a structured OpenAI prompt, and persists the result (sections, bullets, summary, suggestions, optional cover letter).
+- Token usage and word counts are recorded back onto the user for quota tracking.
+- Session detail page shows statuses, run IDs, token stats, generated content, and a collapsible debug log for troubleshooting.
+- If Redis isn’t running when you kick off a session, the view falls back to executing the task synchronously and lets you know with a banner.
+
+### Dashboard + profiles
+- Dashboard pulls recent jobs, tailoring sessions, and token counts.
+- Profile editor keeps basic resume contact info in sync with what the tailoring output expects.
+
+### API surface
+- REST endpoints for authentication, experience graph CRUD, job postings, tailoring sessions, and profiles (see `myapply/urls.py` + app `frontend_urls.py`).
+- Token auth + session auth are both enabled so the web UI and API clients can coexist.
+
+## Environment variables cheat sheet
+
+```
+DJANGO_SECRET_KEY=change-me
+DEBUG=True
+DB_NAME=myapply
+DB_USER=myapply_user
+DB_PASSWORD=...
+DB_HOST=localhost
+DB_PORT=3306
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-4.1-mini
+CELERY_BROKER_URL=redis://127.0.0.1:6379/0
+CELERY_RESULT_BACKEND=redis://127.0.0.1:6379/0
+MAPBOX_TOKEN=optional
+LOG_LEVEL=INFO
 ```
 
-**Migration Errors:**
-```bash
-# Delete migrations and start fresh
-find . -path "*/migrations/*.py" -not -name "__init__.py" -delete
-python manage.py makemigrations
-python manage.py migrate
-```
+## Why no SQLite?
 
-## Resources
+The project relies on JSON columns, MySQL-specific ordering, and long-running Celery jobs that expect a real database connection. Tests and dev use the same MySQL instance so that I don’t get surprised by behavior differences later. If MySQL isn’t available, the app just won’t boot.
 
-- [Django Documentation](https://docs.djangoproject.com/)
-- [Django REST Framework](https://www.django-rest-framework.org/)
-- [OpenAI API](https://platform.openai.com/docs/)
-- [Mapbox API](https://docs.mapbox.com/)
-- [PythonAnywhere Help](https://help.pythonanywhere.com/)
+## Old scripts & docs
 
-## License
-
-MIT
+Everything that used to live in `EXPERIENCE_FEATURE.md` is folded into this README. The legacy shell test `test_experience_service.py` has been dropped now that automated tests cover the service layer.

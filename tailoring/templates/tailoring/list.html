@@ -19,6 +19,7 @@
                     <th>Job Title</th>
                     <th>Company</th>
                     <th>Status</th>
+                    <th>Tokens</th>
                     <th>Created</th>
                     <th>Actions</th>
                 </tr>
@@ -29,14 +30,21 @@
                     <td><strong>{{ session.job.title }}</strong></td>
                     <td>{{ session.job.company }}</td>
                     <td>
-                        {% if session.status == 'completed' %}
-                        <span class="tag tag-success">{{ session.status }}</span>
-                        {% elif session.status == 'failed' %}
-                        <span class="tag tag-error">{{ session.status }}</span>
-                        {% elif session.status == 'processing' %}
-                        <span class="tag tag-warning">{{ session.status }}</span>
+                        {% if session.status == 'COMPLETED' %}
+                        <span class="tag tag-success">{{ session.get_status_display }}</span>
+                        {% elif session.status == 'FAILED' %}
+                        <span class="tag tag-error">{{ session.get_status_display }}</span>
+                        {% elif session.status == 'PROCESSING' %}
+                        <span class="tag tag-warning">{{ session.get_status_display }}</span>
                         {% else %}
-                        <span class="tag">{{ session.status }}</span>
+                        <span class="tag">{{ session.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if session.token_usage.total_tokens %}
+                        {{ session.token_usage.total_tokens }}
+                        {% else %}
+                        —
                         {% endif %}
                     </td>
                     <td>{{ session.created_at|date:"M d, Y" }}</td>

@@ -22,18 +22,34 @@ class TailoringSessionAdmin(admin.ModelAdmin):
         'job__company',
         'generated_title'
     ]
-    readonly_fields = ['created_at', 'updated_at']
+    readonly_fields = [
+        'created_at',
+        'updated_at',
+        'completed_at',
+        'token_usage',
+        'openai_run_id',
+    ]
     
     fieldsets = (
         ('Session Info', {
-            'fields': ('user', 'job', 'status')
+            'fields': ('user', 'job', 'status', 'openai_run_id', 'completed_at')
         }),
         ('Input Data', {
-            'fields': ('input_experience_snapshot',),
+            'fields': ('job_snapshot', 'input_experience_snapshot', 'parameters'),
             'classes': ('collapse',)
         }),
         ('Generated Output', {
-            'fields': ('generated_title', 'generated_bullets')
+            'fields': (
+                'generated_title',
+                'generated_bullets',
+                'generated_sections',
+                'tailored_resume',
+                'cover_letter',
+                'ai_suggestions',
+                'token_usage',
+                'debug_log',
+                'error_message',
+            )
         }),
         ('Metadata', {
             'fields': ('created_at', 'updated_at')

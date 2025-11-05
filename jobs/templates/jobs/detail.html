@@ -31,10 +31,10 @@
                 </div>
             </div>
 
-            {% if job.url %}
+            {% if job.source_url %}
             <div class="mb-2">
                 <p class="text-muted">URL</p>
-                <p><a href="{{ job.url }}" target="_blank" class="text-success">{{ job.url }}</a></p>
+                <p><a href="{{ job.source_url }}" target="_blank" class="text-success">{{ job.source_url }}</a></p>
             </div>
             {% endif %}
 
@@ -49,7 +49,7 @@
             <div class="mb-2">
                 <p class="text-muted">Parsed Requirements</p>
                 <div class="code-block">
-                    <pre>{{ job.parsed_requirements }}</pre>
+                    <pre>{{ job.parsed_requirements|pprint }}</pre>
                 </div>
             </div>
             {% endif %}

@@ -4,9 +4,17 @@ Handles validation and business logic for experience management.
 """
 import uuid
 from datetime import datetime
+import logging
+import os
 from typing import Dict, List, Optional
+from urllib.parse import quote_plus
+
+import requests
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from .models import ExperienceGraph
+
+logger = logging.getLogger(__name__)
 
 
 class ExperienceService:
@@ -160,6 +168,7 @@ class ExperienceService:
         """
         # Validate and clean data
         clean_data = ExperienceService.validate_experience(data)
+        ExperienceService._populate_coordinates(clean_data)
         
         # Get graph and add experience
         graph = ExperienceService.get_experience_graph(user)
@@ -184,9 +193,21 @@ class ExperienceService:
         Raises:
             ValidationError: If validation fails or experience not found
         """
+        existing = ExperienceService.get_experience_by_id(user, experience_id)
+        existing_location = ''
+        existing_coordinates = None
+        if existing:
+            existing_location = existing.get('location', '')
+            existing_coordinates = existing.get('coordinates')
+        
         # Validate and clean data (preserve existing ID)
         data['id'] = experience_id
         clean_data = ExperienceService.validate_experience(data)
+        
+        if existing_coordinates and existing_location.strip().lower() == clean_data.get('location', '').strip().lower():
+            clean_data['coordinates'] = existing_coordinates
+        else:
+            ExperienceService._populate_coordinates(clean_data)
         
         # Get graph and find experience
         graph = ExperienceService.get_experience_graph(user)
@@ -224,3 +245,55 @@ class ExperienceService:
             graph.save()
             return True
         return False
+
+    @staticmethod
+    def _populate_coordinates(experience: Dict) -> Dict:
+        """
+        Attach geocoded coordinates to an experience if possible.
+        """
+        location = (experience.get('location') or '').strip()
+        if not location:
+            experience.pop('coordinates', None)
+            return experience
+
+        token = (
+            os.environ.get('MAPBOX_TOKEN')
+            or getattr(settings, 'MAPBOX_TOKEN', '')
+        )
+        if not token:
+            return experience
+
+        try:
+            query = quote_plus(location)
+            response = requests.get(
+                f"https://api.mapbox.com/geocoding/v5/mapbox.places/{query}.json",
+                params={
+                    'access_token': token,
+                    'limit': 1,
+                    'autocomplete': 'false'
+                },
+                timeout=5,
+            )
+            response.raise_for_status()
+            payload = response.json()
+            features = payload.get('features') or []
+            if not features:
+                return experience
+
+            first = features[0]
+            coords = first.get('geometry', {}).get('coordinates')
+            if not coords or len(coords) < 2:
+                return experience
+
+            experience['coordinates'] = {
+                'longitude': float(coords[0]),
+                'latitude': float(coords[1]),
+                'source': 'mapbox',
+                'relevance': first.get('relevance'),
+                'matched_text': first.get('place_name'),
+            }
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Failed to geocode location '%s': %s", location, exc)
+            experience.pop('coordinates', None)
+
+        return experience

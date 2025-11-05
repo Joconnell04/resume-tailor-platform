@@ -1,0 +1,202 @@
+{% extends 'base.html' %}
+
+{% block title %}Tailoring Session - MyApply{% endblock %}
+
+{% block content %}
+<div class="tailoring-detail">
+    <div class="card-header">
+        <h1 class="card-title">
+            Tailoring Session
+        </h1>
+        <div>
+            {% if session.status == 'COMPLETED' %}
+            <span class="tag tag-success">{{ session.get_status_display }}</span>
+            {% elif session.status == 'FAILED' %}
+            <span class="tag tag-error">{{ session.get_status_display }}</span>
+            {% elif session.status == 'PROCESSING' %}
+            <span class="tag tag-warning">{{ session.get_status_display }}</span>
+            {% else %}
+            <span class="tag">{{ session.get_status_display }}</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card mt-2">
+        <div class="card-header">
+            <h2 class="card-title">Session Info</h2>
+        </div>
+        <div class="card-body">
+            <div class="grid grid-2 mb-2">
+                <div>
+                    <p class="text-muted">Job</p>
+                    <p><strong>{{ session.job.title }}</strong> at {{ session.job.company }}</p>
+                    <a href="{% url 'job_detail' session.job.id %}" class="btn btn-small">View Job</a>
+                    {% if session.job_snapshot.source_url %}
+                    <p class="text-muted mt-1">Job URL</p>
+                    <p><a href="{{ session.job_snapshot.source_url }}" target="_blank" class="text-success">Open posting</a></p>
+                    {% endif %}
+                </div>
+                <div>
+                    <p class="text-muted">Created</p>
+                    <p>{{ session.created_at|date:"M d, Y H:i" }}</p>
+                    {% if session.completed_at %}
+                    <p class="text-muted">Completed</p>
+                    <p>{{ session.completed_at|date:"M d, Y H:i" }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% with params=session.parameters usage=session.token_usage %}
+    <div class="card mt-2">
+        <div class="card-header">
+            <h2 class="card-title">Workflow Details</h2>
+        </div>
+        <div class="card-body">
+            <div class="grid grid-2 meta-grid">
+                <div>
+                    <p class="text-muted">Parameters</p>
+                    <ul class="meta-list">
+                        <li><strong>Tone:</strong> {{ params.tone|default:"—" }}</li>
+                        <li><strong>Sections:</strong>
+                            {% if params.sections %}
+                            {{ params.sections|join:', ' }}
+                            {% else %}—{% endif %}
+                        </li>
+                        <li><strong>Bullets per Section:</strong> {{ params.bullets_per_section|default:"—" }}</li>
+                        <li><strong>Include Summary:</strong> {{ params.include_summary|yesno:"Yes,No" }}</li>
+                        <li><strong>Include Cover Letter:</strong> {{ params.include_cover_letter|yesno:"Yes,No" }}</li>
+                    </ul>
+                </div>
+                <div>
+                    <p class="text-muted">Runtime Metrics</p>
+                    <ul class="meta-list">
+                        <li><strong>Run ID:</strong> {{ session.openai_run_id|default:"—" }}</li>
+                        <li>
+                            <strong>Tokens:</strong>
+                            {% if usage.total_tokens %}
+                                {{ usage.total_tokens }} total
+                                ({{ usage.prompt_tokens|default:0 }} prompt /
+                                {{ usage.completion_tokens|default:0 }} completion)
+                            {% else %}
+                                —
+                            {% endif %}
+                        </li>
+                        <li><strong>Words Generated:</strong> {{ usage.words_generated|default:"—" }}</li>
+                        <li><strong>Status:</strong> {{ session.get_status_display }}</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endwith %}
+
+    {% if session.generated_sections %}
+    <div class="card mt-2">
+        <div class="card-header">
+            <h2 class="card-title">Generated Sections</h2>
+        </div>
+        <div class="card-body section-grid">
+            {% for section in session.generated_sections %}
+            <div class="section-card">
+                <h3>{{ section.name }}</h3>
+                <ul class="bullet-list">
+                    {% for bullet in section.bullets %}
+                    <li>{{ bullet }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% elif session.generated_bullets %}
+    <div class="card mt-2">
+        <div class="card-header">
+            <h2 class="card-title">Generated Bullets</h2>
+        </div>
+        <div class="card-body">
+            <ul class="bullet-list">
+                {% for bullet in session.generated_bullets %}
+                <li>{{ bullet }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if session.tailored_resume %}
+    <div class="card mt-2">
+        <div class="card-header">
+            <h2 class="card-title">Summary</h2>
+        </div>
+        <div class="card-body">
+            <p class="summary-text">{{ session.tailored_resume }}</p>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if session.cover_letter %}
+    <div class="card mt-2">
+        <div class="card-header">
+            <h2 class="card-title">Cover Letter</h2>
+        </div>
+        <div class="card-body">
+            <div class="code-block">
+                <pre>{{ session.cover_letter }}</pre>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if session.ai_suggestions %}
+    <div class="card mt-2">
+        <div class="card-header">
+            <h2 class="card-title">AI Suggestions</h2>
+        </div>
+        <div class="card-body">
+            <div class="suggestion-list">
+                {{ session.ai_suggestions|linebreaks }}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if session.debug_log %}
+    <div class="card mt-2">
+        <div class="card-header">
+            <h2 class="card-title">Debug Log</h2>
+        </div>
+        <div class="card-body">
+            <details class="debug-toggle">
+                <summary>View processing log</summary>
+                <pre class="code-block debug-block">{{ session.debug_log }}</pre>
+            </details>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if session.status in ('PENDING', 'PROCESSING') %}
+    <div class="card mt-2">
+        <div class="card-body">
+            <p class="text-warning">
+                <strong>Heads up:</strong> This session is still running. Refresh the page in a bit to see updated results.
+            </p>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if session.status == 'FAILED' and session.error_message %}
+    <div class="card mt-2">
+        <div class="card-header">
+            <h2 class="card-title text-error">Error</h2>
+        </div>
+        <div class="card-body">
+            <div class="code-block">
+                <pre>{{ session.error_message }}</pre>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

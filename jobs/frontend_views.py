@@ -27,23 +27,34 @@ def job_detail(request, job_id):
 def job_create(request):
     """Create a new job posting."""
     if request.method == 'POST':
-        title = request.POST.get('title')
-        company = request.POST.get('company')
-        raw_description = request.POST.get('raw_description')
-        location_text = request.POST.get('location_text', '')
-        url = request.POST.get('url', '')
-        
+        title = (request.POST.get('title') or '').strip()
+        company = (request.POST.get('company') or '').strip()
+        raw_description = (request.POST.get('raw_description') or '').strip()
+        location_text = (request.POST.get('location_text') or '').strip()
+        source_url = (request.POST.get('source_url') or '').strip()
+
+        if not title or not company:
+            messages.error(request, 'Title and company are required.')
+            return redirect('job_create')
+
+        if not raw_description and not source_url:
+            messages.error(
+                request,
+                'Provide either a job description, a job URL, or both.'
+            )
+            return redirect('job_create')
+
         job = JobPosting.objects.create(
             user=request.user,
             title=title,
             company=company,
             raw_description=raw_description,
             location_text=location_text,
-            url=url
+            source_url=source_url,
         )
         messages.success(request, f'Job "{title}" created successfully.')
         return redirect('job_detail', job_id=job.id)
-    
+
     return render(request, 'jobs/create.html')
 
 
@@ -53,13 +64,30 @@ def job_edit(request, job_id):
     job = get_object_or_404(JobPosting, id=job_id, user=request.user)
     
     if request.method == 'POST':
-        job.title = request.POST.get('title')
-        job.company = request.POST.get('company')
-        job.raw_description = request.POST.get('raw_description')
-        job.location_text = request.POST.get('location_text', '')
-        job.url = request.POST.get('url', '')
+        title = (request.POST.get('title') or '').strip()
+        company = (request.POST.get('company') or '').strip()
+        raw_description = (request.POST.get('raw_description') or '').strip()
+        location_text = (request.POST.get('location_text') or '').strip()
+        source_url = (request.POST.get('source_url') or '').strip()
+
+        if not title or not company:
+            messages.error(request, 'Title and company are required.')
+            return redirect('job_edit', job_id=job.id)
+
+        if not raw_description and not source_url:
+            messages.error(
+                request,
+                'Provide either a job description, a job URL, or both.'
+            )
+            return redirect('job_edit', job_id=job.id)
+
+        job.title = title
+        job.company = company
+        job.raw_description = raw_description
+        job.location_text = location_text
+        job.source_url = source_url
         job.save()
-        
+
         messages.success(request, f'Job "{job.title}" updated successfully.')
         return redirect('job_detail', job_id=job.id)
     

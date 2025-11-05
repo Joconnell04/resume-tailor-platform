@@ -1,0 +1,117 @@
+{% extends 'base.html' %}
+
+{% block title %}New Tailoring Session - MyApply{% endblock %}
+
+{% block content %}
+<div class="tailoring-create">
+    <h1 class="card-title mb-2">
+        Create Tailoring Session
+    </h1>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Create Tailoring Session</h2>
+        </div>
+        <div class="card-body">
+            {% if jobs %}
+            <form method="post">
+                {% csrf_token %}
+                
+                <div class="form-group">
+                    <label class="form-label" for="job_id">Select Job *</label>
+                    <select name="job_id" id="job_id" class="form-select" required>
+                        <option value="">-- Choose a job --</option>
+                        {% for job in jobs %}
+                        <option value="{{ job.id }}">{{ job.title }} at {{ job.company }}</option>
+                        {% endfor %}
+                    </select>
+                    <small class="text-muted">Choose the job you want to tailor your resume for.</small>
+                </div>
+
+                <div class="alert alert-warning mb-2">
+                    <strong>Note:</strong> Starting a session consumes tokens from your balance ({{ user.tokens_available }} available). 
+                    AI processing runs in the background once created.
+                </div>
+
+                <div class="card-subtitle">Tailoring Options</div>
+
+                <div class="form-grid">
+                    <div class="form-group wide">
+                        <label class="form-label" for="sections">Sections (one per line)</label>
+                        <textarea name="sections" id="sections" class="form-textarea" rows="4" placeholder="Professional Highlights&#10;Leadership Impact&#10;Technical Expertise">{{ default_sections_text }}</textarea>
+                        <small class="text-muted">Specify the sections you want in the output. The system keeps at least one section even if left blank.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="bullets_per_section">Bullets Per Section</label>
+                        <input type="number" name="bullets_per_section" id="bullets_per_section" class="form-input" min="1" max="8" value="{{ default_parameters.bullets_per_section }}">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="tone_preset">Tone</label>
+                        <select name="tone_preset" id="tone_preset" class="form-select">
+                            {% for key, preset in tone_presets.items %}
+                            <option value="{{ key }}">{{ preset.label }}</option>
+                            {% endfor %}
+                            <option value="custom">Custom tone</option>
+                        </select>
+                        <input type="text" name="tone_custom" id="tone_custom" class="form-input mt-1" placeholder="Describe your preferred tone" style="display: none;">
+                        <small class="text-muted">Choose a preset or describe the voice you want for the bullets.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="temperature">Creativity</label>
+                        <input type="range" name="temperature" id="temperature" min="0" max="1" step="0.05" value="{{ default_parameters.temperature }}">
+                        <small class="text-muted">Lower = precise &amp; safe, higher = more creative phrasing.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="max_output_tokens">Max Output Tokens</label>
+                        <input type="number" name="max_output_tokens" id="max_output_tokens" class="form-input" min="200" max="1500" value="{{ default_parameters.max_output_tokens }}">
+                        <small class="text-muted">Advanced: adjust if you need longer or shorter responses.</small>
+                    </div>
+
+                    <div class="form-group checkbox-group">
+                        <label class="form-checkbox">
+                            <input type="checkbox" name="include_summary" {% if default_parameters.include_summary %}checked{% endif %}>
+                            <span>Include summary paragraph</span>
+                        </label>
+                        <label class="form-checkbox mt-1">
+                            <input type="checkbox" name="include_cover_letter">
+                            <span>Generate a mini cover letter</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <button type="submit" class="btn btn-primary">Create Session</button>
+                    <a href="{% url 'tailoring_list' %}" class="btn">Cancel</a>
+                </div>
+            </form>
+            {% else %}
+            <p class="text-muted mb-1">No jobs available. Please add a job first.</p>
+            <a href="{% url 'job_create' %}" class="btn btn-primary">+ Add Job</a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const tonePreset = document.getElementById('tone_preset');
+    const toneCustom = document.getElementById('tone_custom');
+    if (!tonePreset || !toneCustom) {
+        return;
+    }
+    const toggleToneField = () => {
+        const isCustom = tonePreset.value === 'custom';
+        toneCustom.style.display = isCustom ? 'block' : 'none';
+        toneCustom.required = isCustom;
+    };
+    tonePreset.addEventListener('change', toggleToneField);
+    toggleToneField();
+});
+</script>
+{% endblock %}
