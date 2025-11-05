@@ -1,4 +1,5 @@
 Django>=4.2,<5.0
 djangorestframework>=3.14,<4.0
 requests>=2.31.0
-mysqlclient # For MySQL support on PythonAnywhere if we want to do this later
+mysqlclient
+python-dotenv
