@@ -77,25 +77,41 @@ WSGI_APPLICATION = 'myapply.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-# Default: SQLite for local development
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
-}
+# Database configuration with environment variable support
+DB_ENGINE = os.environ.get('DB_ENGINE', 'django.db.backends.sqlite3')
 
-# For PythonAnywhere / MySQL:
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.mysql',
-#         'NAME': 'myapply',
-#         'USER': 'user',
-#         'PASSWORD': 'password',
-#         'HOST': 'localhost',
-#         'PORT': '3306',
-#     }
-# }
+if DB_ENGINE == 'django.db.backends.mysql':
+    # MySQL Configuration
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.mysql',
+            'NAME': os.environ.get('DB_NAME', 'myapply'),
+            'USER': os.environ.get('DB_USER', 'root'),
+            'PASSWORD': os.environ.get('DB_PASSWORD', ''),
+            'HOST': os.environ.get('DB_HOST', 'localhost'),
+            'PORT': os.environ.get('DB_PORT', '3306'),
+            'OPTIONS': {
+                'charset': 'utf8mb4',
+                'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+            },
+        }
+    }
+else:
+    # SQLite Configuration (default for local development)
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
+
+# For PythonAnywhere / MySQL, set these environment variables:
+# DB_ENGINE=django.db.backends.mysql
+# DB_NAME=myapply
+# DB_USER=your_username
+# DB_PASSWORD=your_password
+# DB_HOST=your_host.mysql.pythonanywhere-services.com
+# DB_PORT=3306
 
 
 # Password validation
