@@ -41,7 +41,6 @@ class JobPosting(models.Model):
 
     def get_tailoring_stats(self):
         """Returns aggregated stats about tailoring sessions"""
-        from django.db.models import Sum, Q
         sessions = self.tailoring_sessions.all()
         total = sessions.count()
 
@@ -63,10 +62,12 @@ class JobPosting(models.Model):
         failed = sessions.filter(status='FAILED').count()
         pending = sessions.filter(status='PENDING').count()
 
-        # Calculate total tokens
-        token_sum = sessions.aggregate(
-            total=Sum('token_usage__total_tokens')
-        )['total'] or 0
+        # Calculate total tokens by iterating through sessions
+        # (JSONField aggregation doesn't work with Sum())
+        total_tokens = 0
+        for session in sessions:
+            if session.token_usage and isinstance(session.token_usage, dict):
+                total_tokens += session.token_usage.get('total_tokens', 0)
 
         # Calculate success rate
         success_rate = round((completed / total * 100)) if total > 0 else 0
@@ -80,7 +81,7 @@ class JobPosting(models.Model):
             'processing': processing,
             'failed': failed,
             'pending': pending,
-            'total_tokens': token_sum,
+            'total_tokens': total_tokens,
             'latest_session': sessions.first(),
             'success_rate': success_rate,
             'recent_sessions': recent

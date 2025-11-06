@@ -1,6 +1,5 @@
 """
-Initialize Celery when Django starts.
+MyApply Django Application.
 """
-from .celery import app as celery_app
+# Django-Q doesn't require app-level initialization like Celery did
 
-__all__ = ("celery_app",)

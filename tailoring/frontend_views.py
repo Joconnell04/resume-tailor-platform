@@ -2,17 +2,15 @@
 Frontend views for tailoring app.
 """
 import logging
-import threading
 from copy import deepcopy
 from datetime import timedelta
 
-from celery.exceptions import OperationalError as CeleryOperationalError
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
-from kombu.exceptions import OperationalError as KombuOperationalError
+from django_q.tasks import async_task
 
 from experience.models import ExperienceGraph
 from jobs.models import JobPosting
@@ -44,20 +42,7 @@ def tailoring_detail(request, session_id):
     """Display tailoring session details."""
     session = get_object_or_404(TailoringSession, id=session_id, user=request.user)
     
-    # Auto-start processing if still pending and hasn't been attempted yet
-    if session.status == TailoringSession.Status.PENDING:
-        try:
-            # Dispatch in background thread to avoid blocking the response
-            thread = threading.Thread(
-                target=_run_task_in_background,
-                args=(session.id,),
-                daemon=True
-            )
-            thread.start()
-            logger.info(f"Started background thread for session {session_id}")
-        except Exception as e:
-            logger.warning(f"Failed to start background thread for session {session_id}: {e}")
-    
+    # Check for stuck sessions and attempt rescue
     if _rescue_stuck_session(session):
         session.refresh_from_db()
     
@@ -168,14 +153,19 @@ def tailoring_create(request):
             parameters=parameters,
         )
         
+        # Dispatch the task immediately after creation
+        try:
+            _dispatch_tailoring_task(session, request=request, allow_inline=True)
+        except Exception as e:
+            logger.error(f"Failed to dispatch tailoring task for session {session.id}: {e}")
+            messages.error(request, f"Failed to start processing: {e}")
+        
         messages.success(request, f'Tailoring session created for "{job.title}".')
         messages.info(
             request,
             'Processing has started. This page will auto-refresh to show progress.'
         )
         
-        # Redirect FIRST before starting any processing
-        # The detail page will handle dispatching the task if it hasn't started yet
         return redirect('tailoring_detail', session_id=session.id)
     
     default_parameters = AgentKitTailoringService.normalize_parameters(
@@ -247,27 +237,6 @@ def _rescue_stuck_session(session: TailoringSession) -> bool:
     return mutated
 
 
-def _run_task_in_background(session_id: int) -> None:
-    """
-    Run the tailoring task in a background thread.
-    This function attempts Celery first, then falls back to direct execution.
-    """
-    try:
-        # Try to dispatch via Celery
-        process_tailoring_session.delay(session_id)
-        logger.info(f"Queued session {session_id} via Celery")
-    except (KombuOperationalError, CeleryOperationalError, ConnectionError) as e:
-        # Celery/Redis not available - run directly
-        logger.warning(f"Queue unavailable for session {session_id}, running inline: {e}")
-        try:
-            process_tailoring_session(session_id)
-            logger.info(f"Completed session {session_id} inline")
-        except Exception as inline_exc:
-            logger.error(f"Inline execution failed for session {session_id}: {inline_exc}")
-    except Exception as e:
-        logger.error(f"Unexpected error dispatching session {session_id}: {e}")
-
-
 def _dispatch_tailoring_task(
     session: TailoringSession,
     *,
@@ -275,15 +244,20 @@ def _dispatch_tailoring_task(
     allow_inline: bool = True,
 ) -> str:
     """
-    Try to enqueue the tailoring task. Falls back to inline execution when possible.
+    Try to enqueue the tailoring task using Django-Q.
+    Falls back to inline execution when queueing fails.
 
     Returns:
         "queued" if the task was enqueued, "inline" if executed immediately.
     """
     try:
-        process_tailoring_session.delay(session.id)
+        task_id = async_task(
+            'tailoring.tasks.process_tailoring_session',
+            session.id,
+        )
+        logger.info(f"Queued session {session.id} via Django-Q (task_id: {task_id})")
         return "queued"
-    except (KombuOperationalError, CeleryOperationalError, ConnectionError) as exc:
+    except Exception as exc:
         logger.warning(
             "Queue unavailable for session %s. Falling back to inline execution. %s",
             session.id,
@@ -291,7 +265,7 @@ def _dispatch_tailoring_task(
         )
         if allow_inline:
             try:
-                process_tailoring_session.apply(args=(session.id,), throw=True)
+                process_tailoring_session(session.id)
                 if request:
                     messages.info(
                         request,

@@ -1,9 +1,15 @@
 """
 Tailoring app services
 
-AgentKit-like service for AI-powered resume tailoring without relying on the
-hosted AgentKit runtime. This module orchestrates prompt construction,
-experience matching, and OpenAI API calls with web search grounding.
+Core service for AI-powered resume tailoring using OpenAI Responses API.
+This module orchestrates:
+- Job requirement extraction and profiling
+- Experience graph scoring and snippet selection
+- OpenAI API calls with conditional JSON mode and web search
+- Guardrail validation and bullet regeneration
+- ATS scoring and quality validation
+
+Designed to work with Django-Q for asynchronous task processing.
 """
 from __future__ import annotations
 
@@ -320,6 +326,24 @@ class AgentKitTailoringService:
             raise TailoringPipelineError("Job description content is required.")
 
         normalized_parameters = self.normalize_parameters(parameters or {})
+        
+        # When using web search, try to fetch job description first
+        # Note: Many job sites block automated access, so this may fail
+        if source_url and not job_description:
+            logger.info(f"Attempting to fetch job description from URL: {source_url}")
+            fetched_description = self._fetch_job_description_from_url(source_url)
+            
+            if fetched_description:
+                job_description = fetched_description
+                logger.info(f"Successfully fetched {len(job_description)} chars from web search")
+            else:
+                logger.warning(
+                    f"Could not fetch job description from {source_url}. "
+                    f"Website may be blocking automated access. "
+                    f"Will proceed with URL-only mode (requirements extraction will happen during resume generation)."
+                )
+                # Don't fail - we'll still pass the URL to OpenAI for grounding during resume generation
+        
         cleaned_description = self._clean_text(job_description)
         requirements = self._extract_job_requirements(cleaned_description)
         job_profile = self._build_job_profile(
@@ -362,17 +386,52 @@ class AgentKitTailoringService:
                     }
                 )
 
-        enhanced_suggestions = list(result.suggestions)
-        if ats_score["missing_critical"]:
-            enhanced_suggestions.insert(
-                0,
-                f"Add required skills: {', '.join(ats_score['missing_critical'][:3])}"
-            )
+        # Combine AI suggestions with ATS insights intelligently
+        enhanced_suggestions = []
+        
+        # Start with ATS-specific critical findings
+        if ats_score["missing_critical"] and len(ats_score["missing_critical"]) > 0:
+            # Filter out single-letter or trivial terms
+            meaningful_missing = [
+                skill for skill in ats_score["missing_critical"][:5] 
+                if len(skill) > 2 and skill.lower() not in ['aid', 'the', 'and', 'or']
+            ]
+            if meaningful_missing:
+                if len(meaningful_missing) == 1:
+                    enhanced_suggestions.append(
+                        f"Add required skill: {meaningful_missing[0]} - Include specific examples from your experience"
+                    )
+                else:
+                    enhanced_suggestions.append(
+                        f"Add required skills: {', '.join(meaningful_missing[:3])} - Weave these into your achievement descriptions"
+                    )
+        
+        # Add AI-generated suggestions (these are more contextual)
+        if result.suggestions:
+            # Filter out generic/unhelpful suggestions
+            quality_suggestions = [
+                s for s in result.suggestions 
+                if len(s) > 20 and not s.lower().startswith(('enhance', 'improve', 'emphasize'))
+            ]
+            enhanced_suggestions.extend(quality_suggestions[:3])
+        
+        # Add ATS score context if it needs improvement
         if ats_score["overall_score"] < 70:
-            enhanced_suggestions.insert(
-                0,
-                f"ATS Score: {ats_score['overall_score']}% - Improve keyword coverage"
+            enhanced_suggestions.append(
+                f"ATS Score: {ats_score['overall_score']}% - Focus on incorporating missing required skills with concrete examples"
             )
+        elif ats_score["overall_score"] >= 85:
+            enhanced_suggestions.append(
+                f"Strong ATS Score: {ats_score['overall_score']}% - Your resume aligns well with job requirements"
+            )
+        
+        # If we don't have enough quality suggestions, add ATS insights
+        if len(enhanced_suggestions) < 3 and ats_score.get("suggestions"):
+            for suggestion in ats_score["suggestions"]:
+                if len(enhanced_suggestions) >= 5:
+                    break
+                if suggestion not in enhanced_suggestions:
+                    enhanced_suggestions.append(suggestion)
 
         guardrail_dict = [finding for finding in result.guardrail_report]
 
@@ -432,27 +491,39 @@ class AgentKitTailoringService:
             "Balanced: Blend facts with light amplification (≤10% metric lift).",
         )
 
+        bullets_per_section = parameters.get("bullets_per_section", 3)
+        
         generation_payload = {
             "job_profile": job_profile.to_prompt_dict(),
             "experience_snippets": experience_payload,
             "section_plan": section_plan,
             "parameters": {
                 "tone": parameters.get("tone"),
-                "bullets_per_section": parameters.get("bullets_per_section", 3),
+                "bullets_per_section": bullets_per_section,
                 "include_summary": parameters.get("include_summary", True),
                 "stretch_level": stretch_level,
                 "stretch_guidance": stretch_guidance,
             },
             "generation_rules": [
+                f"CRITICAL: Generate EXACTLY {bullets_per_section} bullet points for EACH section listed in section_plan. DO NOT generate more bullets for one section and fewer for another.",
+                f"Each section in your output must contain exactly {bullets_per_section} bullets - no more, no fewer. Distribute bullets evenly across all sections.",
                 "Use snippet achievements verbatim where possible; never invent employers or roles.",
-                "Start every bullet with a strong action verb and include quantifiable metrics when provided.",
+                "Start every bullet with a strong action verb (Built, Architected, Developed, Led, Optimized, etc.) and include quantifiable metrics when provided.",
                 "Respect the stretch guidance—do not exceed the allowed exaggeration from source achievements.",
-                "Maintain ATS-friendly length (100-180 characters) and mirror critical job keywords.",
+                "Maintain ATS-friendly length (100-180 characters) and mirror critical job keywords naturally, while sounding like a human.",
                 "Return bullet objects with snippet references and stretch assessment (0-3).",
+                "NEVER use '+' as substitutes for 'and' - always spell out 'and' in full (e.g., 'React and TypeScript', not 'React + TypeScript').",
+                "Write in complete, professional sentences with proper grammar and punctuation.",
+                "Provide context for each achievement: explain WHAT you built, WHY it mattered, and the IMPACT it delivered.",
+                "Use industry-standard terminology and avoid casual language or abbreviations without context.",
+                "When mentioning technologies, integrate them naturally into the achievement narrative rather than listing them.",
+                "Quantify impact with specific metrics: percentages, dollar amounts, time savings, user counts, or performance improvements.",
+                "Ensure each bullet demonstrates business value, not just technical tasks completed.",
+                "Avoid redundant or vague phrases like 'enhancing user experience' - be specific about the enhancement and its measurable outcome.",
             ],
             "output_schema": {
-                "title": "str",
-                "summary": "optional str",
+                "title": "str - Job title the candidate is targeting",
+                "summary": "optional str - 2-3 sentence compelling value proposition tailored to this specific role",
                 "job_location": {
                     "city": "optional str",
                     "state": "optional str",
@@ -460,21 +531,29 @@ class AgentKitTailoringService:
                     "latitude": "optional float",
                     "longitude": "optional float",
                 },
+                "job_requirements": {
+                    "description": "optional str - When using web search, include extracted job description here",
+                    "required_skills": "optional list[str] - Required technical and soft skills",
+                    "preferred_skills": "optional list[str] - Preferred/nice-to-have skills",
+                    "responsibilities": "optional list[str] - Key responsibilities",
+                    "qualifications": "optional list[str] - Required qualifications",
+                },
                 "sections": [
                     {
-                        "name": "str",
-                        "bullets": [
-                            {
-                                "id": "str",
-                                "snippet_id": "str",
-                                "text": "str",
-                                "stretch": "int 0-3",
-                                "metrics": "optional list[str]",
-                            }
-                        ],
+                        "name": "str - Section name from section_plan",
+                        "bullets": f"Array of EXACTLY {bullets_per_section} bullet objects (not fewer, not more). Each bullet must be a separate object:",
+                        "bullet_structure": {
+                            "id": "str",
+                            "snippet_id": "str",
+                            "text": "str - Complete sentence with strong action verb, context, and quantifiable impact",
+                            "stretch": "int 0-3",
+                            "metrics": "optional list[str]",
+                        },
                     }
                 ],
-                "suggestions": ["str"],
+                "suggestions": [
+                    "str - Specific, actionable recommendations (e.g., 'Add experience with containerization using Docker or Kubernetes to align with DevOps requirements', NOT generic advice like 'Emphasize technical skills')"
+                ],
             },
         }
 
@@ -489,13 +568,71 @@ class AgentKitTailoringService:
             # Include URL in the payload so the model knows to search for it
             generation_payload["job_posting_url"] = job_profile.source_url
 
+        # Build instructions - make JSON requirement explicit when using web search
+        base_instructions = (
+            "You are an elite resume strategist specializing in ATS-optimized, results-driven professional documents. "
+            "Your goal is to craft compelling bullet points that pass ATS screening while showcasing quantifiable impact.\n\n"
+            
+            "CRITICAL WRITING STANDARDS:\n"
+            "- NEVER use '+' as abbreviations for 'and' (write 'React and TypeScript', not 'React + TypeScript')\n"
+            "- Use complete, professional sentences with proper grammar\n"
+            "- Integrate technologies naturally within achievement narratives, not as standalone lists\n"
+            "- Start each bullet with strong action verbs: Architected, Engineered, Optimized, Spearheaded, etc.\n\n"
+            
+            "BULLET POINT QUALITY REQUIREMENTS:\n"
+            "- Provide full context: WHAT was built, WHY it mattered (business need), and IMPACT delivered\n"
+            "- Include specific, quantifiable metrics: percentages, dollar amounts, time savings, scale (users/requests/data volume)\n"
+            "- Demonstrate business value and outcomes, not just technical tasks\n"
+            "- Avoid vague phrases like 'enhancing user experience' - quantify the enhancement\n"
+            "- Each bullet should tell a mini-story of problem → solution → measurable result\n\n"
+            
+            "ATS OPTIMIZATION:\n"
+            "- Mirror job posting keywords naturally within achievement descriptions\n"
+            "- Maintain 100-180 character length for optimal ATS parsing\n"
+            "- Use industry-standard terminology that matches the job description\n"
+            "- Ensure required skills appear in context, not as disconnected terms\n\n"
+            
+            "PROFESSIONAL SUMMARY GUIDELINES:\n"
+            "- Write a compelling 2-3 sentence value proposition tailored to this specific role\n"
+            "- Lead with years of experience and core expertise areas\n"
+            "- Highlight 2-3 key achievements or specializations that align with job requirements\n"
+            "- Avoid generic statements - make it specific to the candidate's background and this opportunity\n\n"
+            
+            "AI SUGGESTIONS REQUIREMENTS:\n"
+            "- Provide 3-5 specific, actionable recommendations (not generic platitudes)\n"
+            "- Focus on gaps between candidate experience and job requirements\n"
+            "- Suggest concrete ways to strengthen keyword coverage with real examples\n"
+            "- Identify missing technical skills or certifications that would improve candidacy\n"
+            "- Recommend quantifiable metrics that could be added if the candidate provides them\n\n"
+        )
+        
+        if grounding:
+            # When using web search, be extremely explicit about JSON format requirement
+            instructions = (
+                base_instructions +
+                "OUTPUT FORMAT (CRITICAL - READ CAREFULLY):\n"
+                "- If job_posting_url is provided, use web search to get complete job posting details\n"
+                "- Extract job location with approximate latitude/longitude if possible\n"
+                "- YOU MUST RETURN ONLY A SINGLE VALID JSON OBJECT - NO NARRATIVE TEXT, NO MARKDOWN, NO EXPLANATIONS\n"
+                "- DO NOT write any introductory text like 'Based on...', 'Here is...', etc.\n"
+                "- DO NOT wrap the JSON in markdown code blocks (no ```json or ``` markers)\n"
+                "- DO NOT include any text before or after the JSON object\n"
+                "- START YOUR RESPONSE WITH THE OPENING { CHARACTER\n"
+                "- END YOUR RESPONSE WITH THE CLOSING } CHARACTER\n"
+                "- The JSON must exactly match the provided output_schema structure\n"
+                "- All text fields must be professional, polished, and ready for direct use in a resume"
+            )
+        else:
+            instructions = (
+                base_instructions +
+                "OUTPUT FORMAT:\n"
+                "- Extract job location with approximate latitude/longitude if possible\n"
+                "- Return pure JSON matching the schema (no markdown, no code blocks, no extra text)\n"
+                "- Ensure all text fields are professional, polished, and ready for direct use in a resume"
+            )
+
         resume_payload, run_id, resume_usage = self._call_openai_json(
-            instructions=(
-                "You are an ATS-focused resume strategist. Consume the JSON payload and reply with JSON matching"
-                " the requested schema. If a job_posting_url is provided, search the web for that URL to get the"
-                " complete job posting details. Extract the job location and if possible, provide approximate"
-                " latitude/longitude coordinates for the city mentioned. Do not include markdown."
-            ),
+            instructions=instructions,
             payload=generation_payload,
             temperature=float(parameters.get("temperature", 0.35)),
             max_output_tokens=int(parameters.get("max_output_tokens", 900)),
@@ -504,6 +641,36 @@ class AgentKitTailoringService:
 
         debug_refs["resume_generation"] = resume_payload
         self._merge_usage(token_usage_totals, resume_usage)
+
+        # Extract job requirements if provided by the model (when using web search)
+        job_requirements = resume_payload.get("job_requirements", {})
+        if job_requirements and isinstance(job_requirements, dict):
+            # Update job_profile with extracted requirements
+            if job_requirements.get("description"):
+                extracted_desc = str(job_requirements["description"])
+                if len(extracted_desc) > len(job_profile.description):
+                    logger.info(f"Updating job profile with {len(extracted_desc)} chars from AI web search")
+                    job_profile.description = extracted_desc
+                    
+                    # Re-extract requirements from the AI-provided description
+                    updated_requirements = self._extract_job_requirements(extracted_desc)
+                    job_profile.requirements = updated_requirements
+                    job_profile.requirement_buckets = self._bucketize_requirements(updated_requirements)
+                    logger.info(
+                        f"Extracted from AI response: {len(updated_requirements.get('keywords', []))} keywords, "
+                        f"{len(updated_requirements.get('required_skills', []))} required skills"
+                    )
+            
+            # Also extract direct skill lists if provided
+            if job_requirements.get("required_skills"):
+                existing_required = set(job_profile.requirements.get("required_skills", []))
+                ai_required = [str(s) for s in job_requirements["required_skills"]]
+                job_profile.requirements["required_skills"] = sorted(existing_required | set(ai_required))
+            
+            if job_requirements.get("preferred_skills"):
+                existing_preferred = set(job_profile.requirements.get("preferred_skills", []))
+                ai_preferred = [str(s) for s in job_requirements["preferred_skills"]]
+                job_profile.requirements["preferred_skills"] = sorted(existing_preferred | set(ai_preferred))
 
         # Extract location data if provided by the model
         job_location = resume_payload.get("job_location", {})
@@ -526,6 +693,20 @@ class AgentKitTailoringService:
             resume_payload,
             default_stretch=stretch_level,
         )
+        
+        # Validate bullet distribution across sections
+        expected_bullets = bullets_per_section
+        section_counts = {}
+        for section in sections:
+            section_name = section.get("name", "Unknown")
+            bullet_count = len(section.get("bullets", []))
+            section_counts[section_name] = bullet_count
+            
+            if bullet_count != expected_bullets:
+                logger.warning(
+                    f"Section '{section_name}' has {bullet_count} bullets, expected {expected_bullets}. "
+                    f"Distribution: {section_counts}"
+                )
 
         result = TailoringResult(
             title=str(resume_payload.get("title", "")),
@@ -1395,16 +1576,20 @@ class AgentKitTailoringService:
             ],
             "temperature": temperature,
             "max_output_tokens": max_output_tokens,
-            "text": {
+        }
+
+        # OpenAI doesn't allow web_search with JSON mode
+        # When grounding is needed, use text mode and parse JSON manually
+        if grounding:
+            request_params["tools"] = [{"type": "web_search"}]
+            # Skip JSON mode - model will return JSON in text format
+        else:
+            # Use strict JSON mode when web_search isn't needed
+            request_params["text"] = {
                 "format": {
                     "type": "json_object"
                 }
             }
-        }
-
-        # Use web_search tool for job URL fetching
-        if grounding:
-            request_params["tools"] = [{"type": "web_search"}]
 
         try:
             response = self.client.responses.create(**request_params)
@@ -1425,10 +1610,22 @@ class AgentKitTailoringService:
 
         raw_payload = "".join(output_text_parts).strip()
 
-        # Clean markdown code fences if present (shouldn't be with JSON mode)
+        # Clean various text prefixes that might appear before JSON
+        # Common patterns: "Based on...", "Here is...", etc.
+        if not raw_payload.startswith("{"):
+            # Try to find where JSON actually starts
+            json_start = raw_payload.find("{")
+            if json_start > 0:
+                # Check if there's explanatory text before the JSON
+                prefix = raw_payload[:json_start].strip()
+                if len(prefix) > 0 and len(prefix) < 200:  # Likely explanatory text
+                    logger.warning(f"Stripping non-JSON prefix: {prefix[:100]}...")
+                    raw_payload = raw_payload[json_start:]
+
+        # Clean markdown code fences if present
         if raw_payload.startswith("```json"):
             raw_payload = raw_payload[7:]
-        if raw_payload.startswith("```"):
+        elif raw_payload.startswith("```"):
             raw_payload = raw_payload[3:]
         if raw_payload.endswith("```"):
             raw_payload = raw_payload[:-3]
@@ -1449,19 +1646,52 @@ class AgentKitTailoringService:
                 f"JSON decode error at line {e.lineno} col {e.colno}: {e.msg}. "
                 f"Payload preview: {raw_payload[:500]}..."
             )
-            # Try to extract JSON by finding object boundaries
+            
+            # Try aggressive extraction: find first { and last }
             start = raw_payload.find("{")
             end = raw_payload.rfind("}")
+            
             if start == -1 or end == -1:
                 raise TailoringPipelineError(
                     f"Failed to parse OpenAI JSON payload. Error: {e.msg} at line {e.lineno}"
                 ) from e
+            
+            # Extract potential JSON
+            potential_json = raw_payload[start : end + 1]
+            
             try:
-                return json.loads(raw_payload[start : end + 1])
+                return json.loads(potential_json)
             except json.JSONDecodeError as e2:
+                # Last resort: Try to find JSON between markdown sections
+                # Pattern: look for JSON after "**" markers or other markdown
+                lines = raw_payload.split('\n')
+                json_lines = []
+                in_json = False
+                brace_count = 0
+                
+                for line in lines:
+                    stripped = line.strip()
+                    if not in_json and stripped.startswith('{'):
+                        in_json = True
+                        brace_count = stripped.count('{') - stripped.count('}')
+                        json_lines.append(line)
+                    elif in_json:
+                        json_lines.append(line)
+                        brace_count += stripped.count('{') - stripped.count('}')
+                        if brace_count == 0:
+                            break
+                
+                if json_lines:
+                    try:
+                        potential_json = '\n'.join(json_lines)
+                        return json.loads(potential_json)
+                    except json.JSONDecodeError:
+                        pass
+                
                 raise TailoringPipelineError(
                     f"Failed to parse extracted JSON. Original error: {e.msg}, "
-                    f"Extraction error: {e2.msg}. Check logs for payload details."
+                    f"Extraction error: {e2.msg}. The model returned narrative text instead of JSON. "
+                    f"Check logs for full payload."
                 ) from e2
 
     def _extract_usage(self, response: Any) -> Dict[str, int]:
@@ -1480,6 +1710,140 @@ class AgentKitTailoringService:
     def _merge_usage(self, accumulator: Dict[str, int], usage: Dict[str, int]) -> None:
         for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
             accumulator[key] = accumulator.get(key, 0) + int(usage.get(key, 0) or 0)
+
+    def _fetch_job_description_from_url(self, url: str) -> str:
+        """
+        Use OpenAI web search to fetch and extract job description from a URL.
+        
+        Args:
+            url: Job posting URL to fetch
+            
+        Returns:
+            Extracted job description text
+        """
+        extraction_payload = {
+            "url": url,
+            "instructions": [
+                "Extract the complete job description including:",
+                "- Job title and location",
+                "- Job summary/overview",
+                "- Key responsibilities and duties",
+                "- Required qualifications and skills",
+                "- Preferred qualifications and skills",
+                "- Education requirements",
+                "- Years of experience required",
+                "- Any certifications or licenses needed",
+                "- Company information (if available)",
+            ]
+        }
+        
+        instructions = (
+            "You are a job posting extraction specialist. Use web search to fetch the job posting "
+            "from the provided URL and extract ALL relevant information about the role.\n\n"
+            "CRITICAL OUTPUT FORMAT REQUIREMENTS:\n"
+            "- You MUST return ONLY a valid JSON object\n"
+            "- DO NOT include any explanatory text before or after the JSON\n"
+            "- START YOUR RESPONSE WITH THE { CHARACTER\n"
+            "- END YOUR RESPONSE WITH THE } CHARACTER\n"
+            "- If the website is blocked by CAPTCHA or unavailable, return:\n"
+            '  {"error": "Website blocked or unavailable", "full_description": "", "job_title": "", "location": "", "company": ""}\n\n'
+            "Required JSON structure:\n"
+            "{\n"
+            '  "job_title": "string - exact job title from posting",\n'
+            '  "location": "string - job location",\n'
+            '  "company": "string - company name",\n'
+            '  "full_description": "string - Complete job description with all sections, responsibilities, and requirements",\n'
+            '  "responsibilities": ["array of responsibility bullet points"],\n'
+            '  "required_qualifications": ["array of required qualifications"],\n'
+            '  "preferred_qualifications": ["array of preferred qualifications"],\n'
+            '  "education": "string - education requirements",\n'
+            '  "experience_years": "string - years of experience required"\n'
+            "}"
+        )
+        
+        grounding = {
+            "type": "web_search",
+            "web_search": {
+                "queries": [f"job posting {url}"]
+            },
+        }
+        
+        try:
+            response_payload, _run_id, _usage = self._call_openai_json(
+                instructions=instructions,
+                payload=extraction_payload,
+                temperature=0.0,
+                max_output_tokens=2000,
+                grounding=grounding,
+            )
+            
+            # Check for error responses (CAPTCHA, blocked sites, etc.)
+            if response_payload.get("error"):
+                logger.warning(f"Web search encountered error: {response_payload.get('error')}")
+                return ""
+            
+            # Check if we got meaningful content
+            full_desc = response_payload.get("full_description", "")
+            if not full_desc or len(full_desc) < 100:
+                # Try to construct from parts if full_description is missing
+                parts = []
+                if response_payload.get("responsibilities"):
+                    parts.extend(response_payload["responsibilities"])
+                if response_payload.get("required_qualifications"):
+                    parts.extend(response_payload["required_qualifications"])
+                
+                if parts:
+                    full_desc = "\n".join(parts)
+            
+            if not full_desc or len(full_desc) < 50:
+                logger.warning(f"Web search returned minimal/no content for {url}")
+                return ""
+            
+            # Construct full description from extracted parts
+            full_desc_parts = []
+            
+            if response_payload.get("job_title"):
+                full_desc_parts.append(f"Job Title: {response_payload['job_title']}")
+            if response_payload.get("location"):
+                full_desc_parts.append(f"Location: {response_payload['location']}")
+            if response_payload.get("company"):
+                full_desc_parts.append(f"Company: {response_payload['company']}")
+            
+            if response_payload.get("full_description"):
+                full_desc_parts.append(response_payload["full_description"])
+            
+            if response_payload.get("responsibilities"):
+                full_desc_parts.append("\nResponsibilities:")
+                for resp in response_payload["responsibilities"]:
+                    full_desc_parts.append(f"- {resp}")
+            
+            if response_payload.get("required_qualifications"):
+                full_desc_parts.append("\nRequired Qualifications:")
+                for qual in response_payload["required_qualifications"]:
+                    full_desc_parts.append(f"- {qual}")
+            
+            if response_payload.get("preferred_qualifications"):
+                full_desc_parts.append("\nPreferred Qualifications:")
+                for qual in response_payload["preferred_qualifications"]:
+                    full_desc_parts.append(f"- {qual}")
+            
+            if response_payload.get("education"):
+                full_desc_parts.append(f"\nEducation: {response_payload['education']}")
+            if response_payload.get("experience_years"):
+                full_desc_parts.append(f"Experience: {response_payload['experience_years']}")
+            
+            full_description = "\n".join(full_desc_parts)
+            
+            if not full_description or len(full_description) < 100:
+                logger.warning(f"Web search returned minimal content for {url}: {len(full_description)} chars")
+                return ""
+            
+            logger.info(f"Successfully extracted {len(full_description)} chars from {url}")
+            return full_description
+            
+        except Exception as e:
+            logger.error(f"Failed to fetch job description from {url}: {e}")
+            return ""
 
 class ResumeOptimizer:
     """
@@ -1520,8 +1884,12 @@ class ResumeOptimizer:
         
         # Calculate keyword match
         keyword_matches = 0
+        matched_keywords = []
         if job_keywords:
-            keyword_matches = sum(1 for kw in job_keywords if kw.lower() in resume_text)
+            for kw in job_keywords:
+                if kw.lower() in resume_text:
+                    keyword_matches += 1
+                    matched_keywords.append(kw)
             keyword_match_pct = (keyword_matches / len(job_keywords)) * 100
         else:
             keyword_match_pct = 0.0
@@ -1529,26 +1897,45 @@ class ResumeOptimizer:
         # Calculate required skills match (weighted heavily)
         required_matches = 0
         missing_required = []
+        matched_required = []
         if required_skills:
             for skill in required_skills:
+                # Skip single-letter or overly generic terms that provide no value
+                if len(skill) <= 2 or skill.lower() in ['a', 'an', 'the', 'aid', 'it', 'is']:
+                    continue
                 if skill.lower() in resume_text:
                     required_matches += 1
+                    matched_required.append(skill)
                 else:
                     missing_required.append(skill)
-            required_match_pct = (required_matches / len(required_skills)) * 100
+            # Recalculate with filtered skills
+            total_valid_required = required_matches + len(missing_required)
+            if total_valid_required > 0:
+                required_match_pct = (required_matches / total_valid_required) * 100
+            else:
+                required_match_pct = 100.0
         else:
             required_match_pct = 100.0  # No requirements = perfect score
         
         # Calculate preferred skills match (bonus points)
         preferred_matches = 0
         missing_preferred = []
+        matched_preferred = []
         if preferred_skills:
             for skill in preferred_skills:
+                # Skip trivial terms
+                if len(skill) <= 2 or skill.lower() in ['a', 'an', 'the', 'aid', 'it', 'is']:
+                    continue
                 if skill.lower() in resume_text:
                     preferred_matches += 1
+                    matched_preferred.append(skill)
                 else:
                     missing_preferred.append(skill)
-            preferred_match_pct = (preferred_matches / len(preferred_skills)) * 100
+            total_valid_preferred = preferred_matches + len(missing_preferred)
+            if total_valid_preferred > 0:
+                preferred_match_pct = (preferred_matches / total_valid_preferred) * 100
+            else:
+                preferred_match_pct = 0.0
         else:
             preferred_match_pct = 0.0
         
@@ -1560,35 +1947,60 @@ class ResumeOptimizer:
             (preferred_match_pct * 0.10)
         )
         
-        # Generate suggestions
+        # Generate specific, actionable suggestions
         suggestions = []
-        if missing_required:
-            suggestions.append(
-                f"CRITICAL: Add these required skills: {', '.join(missing_required[:5])}"
-            )
-        if required_match_pct < 80:
-            suggestions.append(
-                "Include more required skills throughout your bullets"
-            )
-        if keyword_match_pct < 60:
-            suggestions.append(
-                "Incorporate more job-specific keywords naturally"
-            )
-        if missing_preferred and preferred_match_pct < 50:
-            suggestions.append(
-                f"Consider adding preferred skills: {', '.join(missing_preferred[:3])}"
-            )
+        
+        # Focus on critical missing skills first
+        if missing_required and len(missing_required) > 0:
+            top_missing = missing_required[:3]
+            if len(top_missing) == 1:
+                suggestions.append(
+                    f"Add required skill: {top_missing[0]} - Include specific examples of how you've used this in your experience"
+                )
+            else:
+                suggestions.append(
+                    f"Add required skills: {', '.join(top_missing)} - Weave these into your achievement descriptions with concrete examples"
+                )
+        
+        # Provide context-aware keyword suggestions
+        if keyword_match_pct < 60 and job_keywords:
+            missing_keywords = [kw for kw in job_keywords if kw.lower() not in resume_text][:5]
+            if missing_keywords:
+                suggestions.append(
+                    f"Strengthen keyword coverage by incorporating: {', '.join(missing_keywords)} - Use these terms naturally when describing relevant work"
+                )
+        
+        # Suggest preferred skills if space allows
+        if missing_preferred and preferred_match_pct < 40 and len(missing_preferred) > 0:
+            top_preferred = [s for s in missing_preferred[:3] if len(s) > 2]
+            if top_preferred:
+                suggestions.append(
+                    f"Consider highlighting: {', '.join(top_preferred)} - These preferred skills could differentiate your application"
+                )
+        
+        # Provide overall guidance
         if overall_score >= 85:
             suggestions.append(
-                "Excellent ATS compatibility! Your resume should pass most ATS filters."
+                "Strong ATS compatibility - Your resume aligns well with job requirements"
             )
         elif overall_score >= 70:
             suggestions.append(
-                "Good ATS compatibility. Minor improvements could boost your score."
+                "Good foundation - Focus on incorporating the missing required skills to reach excellent ATS compatibility"
+            )
+        elif overall_score >= 50:
+            suggestions.append(
+                "Moderate ATS match - Priority: add required skills with specific examples from your experience"
             )
         else:
             suggestions.append(
-                "ATS compatibility needs improvement. Focus on required skills first."
+                "Significant gaps in required skills - Review job posting carefully and align your resume with key requirements"
+            )
+        
+        # Add metric-focused suggestion if few numbers detected
+        numbers_count = len(re.findall(r'\d+', resume_text))
+        if numbers_count < len(bullet_points) * 0.5:  # Less than 50% of bullets have metrics
+            suggestions.append(
+                "Add quantifiable metrics to your achievements (e.g., percentages, dollar amounts, time savings, user scale)"
             )
         
         return {
@@ -1598,6 +2010,8 @@ class ResumeOptimizer:
             "preferred_skills_match": round(preferred_match_pct, 1),
             "missing_critical": missing_required[:10],  # Limit to top 10
             "missing_preferred": missing_preferred[:10],
+            "matched_required": matched_required,
+            "matched_preferred": matched_preferred,
             "suggestions": suggestions,
         }
 

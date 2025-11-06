@@ -1,6 +1,6 @@
 # MyApply Resume Tailor
 
-This is the class project where I’m building a lightweight resume tailoring portal on top of Django. Job seekers can track roles they’re interested in, store a structured "experience graph," and run a staged OpenAI workflow that builds job profiles, selects experience snippets, and returns guardrail-checked resume bullets. Everything runs against MySQL and a Celery worker so the browser never blocks while OpenAI does its thing.
+This is the class project where I'm building a lightweight resume tailoring portal on top of Django. Job seekers can track roles they're interested in, store a structured "experience graph," and run a staged OpenAI workflow that builds job profiles, selects experience snippets, and returns guardrail-checked resume bullets. Everything runs against MySQL and Django-Q background workers so the browser never blocks while OpenAI does its thing.
 
 ## What lives in each app?
 
@@ -8,16 +8,17 @@ This is the class project where I’m building a lightweight resume tailoring po
 - **profiles** – simple CRUD for the user’s personal info and links that end up on the resume preview.
 - **experience** – the “experience graph” manager. Users edit job, project, education, and volunteer entries through well-validated forms that write to JSON in MySQL. Sorting, validation, and conversions all live in `experience/services.py`.
 - **jobs** – lets a user paste a job description, drop a posting URL, or do both. Stores parsing metadata so the tailoring service can reuse it.
-- **tailoring** – asynchronous pipeline: snapshots the job + experience data, enqueues a Celery task, calls the OpenAI Responses API, and stores the generated bullets/sections/suggestions with debug logs.
+- **tailoring** – asynchronous pipeline: snapshots the job + experience data, enqueues a Django-Q task, calls the OpenAI Responses API, and stores the generated bullets/sections/suggestions with debug logs.
 - **maps** – placeholder for Mapbox commute calculations (API key wiring is already in settings but the feature is still a stub).
-- **myapply** – the project config plus shared templates (`base.html`, dashboard, login) and Celery bootstrap.
+- **myapply** – the project config plus shared templates (`base.html`, dashboard, login) and Django-Q configuration.
 
 ## Stack + infrastructure
 
-- **Backend**: Django 4.2, Python 3.10+, Django REST Framework for the API, Celery 5 with Redis for background jobs.
+- **Backend**: Django 4.2, Python 3.10+, Django REST Framework for the API, **Django-Q2** for background task processing (uses MySQL as queue backend).
 - **Database**: MySQL only. There's no SQLite fallback anywhere, so make sure you have a running MySQL 8 instance for dev and tests.
-- **AI**: OpenAI **Responses API** (model defaults to `gpt-4o-mini`). The tailoring service uses the Responses API with JSON mode (`text.format.type = "json_object"`) to ensure reliable structured output. It builds job profiles, scores experience snippets, orchestrates staged generation + guardrail passes, and records token usage per call. Web search tool integration enables automatic job posting fetching from URLs and location coordinate extraction.
-- **Other services**: Redis (broker + result backend), optional Mapbox token waiting for the maps feature.
+- **AI**: OpenAI **Responses API** (model defaults to `gpt-4o-mini`). The tailoring service uses the Responses API with conditional JSON mode for reliable structured output. It builds job profiles, scores experience snippets, orchestrates staged generation + guardrail passes, and records token usage per call. Web search tool integration enables automatic job posting fetching from URLs and location coordinate extraction.
+- **Background Tasks**: Django-Q2 with MySQL ORM backend (no Redis or external broker required). This works seamlessly on PythonAnywhere and other hosting platforms.
+- **Other services**: Optional Mapbox token waiting for the maps feature.
 - **Frontend**: Django template system with all templates scoped to each app, plus a shared CSS file in `static/css/style.css`.
 
 ## Local setup
@@ -34,22 +35,28 @@ This is the class project where I’m building a lightweight resume tailoring po
    GRANT ALL PRIVILEGES ON myapply.* TO 'myapply_user'@'localhost';
    FLUSH PRIVILEGES;
    ```
-4. Copy `.env.example` to `.env` and fill in the blanks for `DJANGO_SECRET_KEY`, MySQL creds, `OPENAI_API_KEY`, `OPENAI_MODEL`, and the Redis URLs. No SQLite settings are honored, so leave those out.
-5. Run migrations and create a superuser:
+4. Copy `.env.example` to `.env` and fill in the blanks for `DJANGO_SECRET_KEY`, MySQL creds, `OPENAI_API_KEY`, and `OPENAI_MODEL`. No Redis or broker URLs needed anymore.
+5. Run migrations:
    ```bash
    python manage.py migrate
    python manage.py createsuperuser
    ```
-6. Start Redis (local default is fine):
    ```bash
-   redis-server
+   python manage.py migrate
+   python manage.py createsuperuser
    ```
-7. In separate terminals, launch Celery and Django:
+
+6. In separate terminals, launch the Django-Q worker and Django dev server:
    ```bash
-   celery -A myapply worker -l info
+   # Terminal 1: Start Django-Q worker cluster
+   python manage.py qcluster
+   
+   # Terminal 2: Start Django development server
    python manage.py runserver
    ```
-8. Visit `http://127.0.0.1:8000/`, log in, and you’re set.
+7. Visit `http://127.0.0.1:8000/`, log in, and you're set.
+
+**Note**: Django-Q stores tasks in the MySQL database, so no external services (like Redis) are required. The worker cluster processes tasks asynchronously and can be monitored via the Django admin interface at `/admin/django_q/`.
 
 ### Running tests
 
@@ -108,17 +115,17 @@ DB_HOST=localhost
 DB_PORT=3306
 OPENAI_API_KEY=sk-...
 OPENAI_MODEL=gpt-4o-mini
-CELERY_BROKER_URL=redis://127.0.0.1:6379/0
-CELERY_RESULT_BACKEND=redis://127.0.0.1:6379/0
 TAILORING_PENDING_TIMEOUT_MINUTES=5
 TAILORING_PROCESSING_TIMEOUT_MINUTES=15
 MAPBOX_TOKEN=optional
 LOG_LEVEL=INFO
 ```
 
+**Note:** Redis/Celery environment variables are no longer needed. Django-Q uses the MySQL database for task queuing.
+
 ## Why no SQLite?
 
-The project relies on JSON columns, MySQL-specific ordering, and long-running Celery jobs that expect a real database connection. Tests and dev use the same MySQL instance so that I don’t get surprised by behavior differences later. If MySQL isn’t available, the app just won’t boot.
+The project relies on JSON columns, MySQL-specific ordering, and Django-Q background tasks that use the ORM. Tests and dev use the same MySQL instance so that I don't get surprised by behavior differences later. If MySQL isn't available, the app just won't boot.
 
 ## ATS + guardrail toolkit
 
@@ -202,11 +209,11 @@ python manage.py test tailoring.tests.test_services
 # Start development server
 python manage.py runserver
 
-# Start Celery worker
-celery -A config worker -l info
+# Start Django-Q worker cluster
+python manage.py qcluster
 
 # Create test session via admin or API
-# Monitor Celery logs for processing output
+# Monitor Django-Q admin at /admin/django_q/ for task status
 ```
 
 #### Validation Checklist
@@ -264,8 +271,12 @@ OPENAI_MODEL = 'gpt-4o-mini'
 OPENAI_TEMPERATURE = 0.7
 OPENAI_MAX_TOKENS = 2000
 
-CELERY_BROKER_URL = env('REDIS_URL')
-CELERY_RESULT_BACKEND = env('REDIS_URL')
+Q_CLUSTER = {
+    'name': 'myapply',
+    'timeout': 600,
+    'retry': 1200,
+    'orm': 'default',  # Uses MySQL database as task queue
+}
 
 ATS_SCORE_THRESHOLD = 85  # Target score
 ATS_CRITICAL_THRESHOLD = 50  # Minimum acceptable
@@ -274,23 +285,36 @@ ATS_CRITICAL_THRESHOLD = 50  # Minimum acceptable
 **Monitoring:**
 - Track ATS score distribution (aim for 85%+ average)
 - Monitor OpenAI API latency and errors
-- Alert on Celery task failures
+- Alert on Django-Q task failures (check admin dashboard)
 - Review token usage trends monthly
 
 **Scaling Considerations:**
-- Redis for Celery queue (handles 10K+ tasks/hour)
-- PostgreSQL for session persistence
+- MySQL database for task queue (handles thousands of tasks/hour)
+- Add more `qcluster` workers for horizontal scaling
 - OpenAI rate limits: 10,000 RPM (adjust if needed)
-- Horizontal scaling: Add Celery workers as needed
+- Monitor Django-Q admin dashboard for task backlog
 
 ## Troubleshooting
 
 ### Common Issues
 
+**Issue: Tasks Not Processing**
+- **Symptoms**: Sessions stuck in "pending" status
+- **Cause**: Django-Q worker (`qcluster`) is not running
+- **Fix**: 
+  ```bash
+  # Start the worker cluster
+  python manage.py qcluster
+  
+  # Or check if it's running
+  ps aux | grep qcluster
+  ```
+- **Validation**: Check Django admin at `/admin/django_q/task/` to see task queue
+
 **Issue: JSON Parsing Errors from OpenAI**
-- **Cause**: Missing `text.format` parameter in Responses API call, causing model to output unstructured text
-- **Fix**: Ensure all `_call_openai_json()` calls include `"text": {"format": {"type": "json_object"}}` in request params
-- **Validation**: Check logs for "Failed to parse OpenAI JSON payload" - should not occur with JSON mode enabled
+- **Cause**: Model returns unstructured text when web_search tool is used
+- **Fix**: The code conditionally enables JSON mode - when web_search is needed, explicit instructions ensure JSON output
+- **Validation**: Check logs for "Failed to parse OpenAI JSON payload" with line/column error details
 
 **Issue: Low ATS Score (<70%)**
 - **Cause**: Missing required skills or keywords
@@ -298,41 +322,96 @@ ATS_CRITICAL_THRESHOLD = 50  # Minimum acceptable
 
 **Issue: OpenAI API Timeout**
 - **Cause**: Large job descriptions or slow web search
-- **Fix**: Increase timeout in settings, retry task, check OpenAI status
+- **Fix**: Increase timeout in Q_CLUSTER settings (`timeout` parameter), check OpenAI status
 
 **Issue: No Metrics in Bullets**
 - **Cause**: Experience graph lacks quantifiable achievements
 - **Fix**: Add metrics to achievements (%, $, time saved), re-run session
 
-**Issue: Celery Task Stuck in 'processing'**
+**Issue: Task Stuck in 'processing'**
 - **Cause**: Worker crashed or task timeout
-- **Fix**: Check Celery logs, restart worker, increase task timeout
+- **Fix**: Check Django-Q logs in admin, restart qcluster, increase timeout in Q_CLUSTER settings
 
 ### Debug Commands
 
 ```bash
-# Check Celery worker status
-celery -A config inspect active
+# Check Django-Q worker status
+python manage.py qcluster --help
 
-# View task details
+# View task details in Django admin
+# Navigate to: /admin/django_q/task/
+
+# Or check via shell
 python manage.py shell
+>>> from django_q.models import Task
+>>> Task.objects.filter(name='tailoring.tasks.process_tailoring_session').order_by('-started')[:10]
+
+# View specific session
 >>> from tailoring.models import TailoringSession
 >>> session = TailoringSession.objects.get(id=123)
->>> print(session.ats_metadata)
+>>> print(session.debug_log)
+>>> print(session.status)
 
-# Reprocess failed session
->>> from tailoring.tasks import process_tailoring_session
->>> process_tailoring_session.apply_async(args=[session.id])
+# Manually trigger a task (for testing)
+>>> from django_q.tasks import async_task
+>>> async_task('tailoring.tasks.process_tailoring_session', 123)
 ```
 
 ## Recent Updates
 
-**November 2025 - JSON Mode Fix**
-- Fixed JSON parsing errors by adding `text.format.type = "json_object"` to all OpenAI Responses API calls
-- This ensures the model returns valid JSON without markdown wrapping or formatting issues
-- Enhanced error logging to show line/column numbers and payload previews for debugging
-- Updated all documentation to reflect proper Responses API usage with JSON mode
-- The previous agent's integration of the Responses API was correct; the issue was missing the JSON format specification
+**November 2025 - Migration from Celery+Redis to Django-Q**
+- **✅ Replaced Celery with Django-Q2**: Simplified background task processing
+  - **No Redis required**: Django-Q uses MySQL database as queue backend
+  - **PythonAnywhere compatible**: Works on any hosting platform with database access
+  - **Simpler setup**: No external services, no separate broker configuration
+  - **Built-in monitoring**: View task status in Django admin at `/admin/django_q/`
+  - **Same features**: Async tasks, retries, timeouts all supported
+  
+- **Migration Benefits**:
+  - Removed 2 dependencies: `celery` and `redis`
+  - Reduced complexity: No Redis installation/management needed
+  - Better portability: Deploy anywhere Django can run
+  - Native Django integration: Uses ORM, migrations, admin interface
+
+- **OpenAI API Fix**: Resolved incompatibility between `web_search` tool and JSON mode
+  - OpenAI doesn't allow `web_search` with `text.format.type = "json_object"` simultaneously (returns 400 error)
+  - Solution: Conditionally enable JSON mode only when web_search is NOT needed
+  - When using web_search for job URL fetching, rely on explicit instructions for pure JSON output
+  - Enhanced error logging to show line/column numbers and payload previews for debugging
+
+## Deployment Notes
+
+### PythonAnywhere Hosting
+
+**✅ Now Fully Compatible with PythonAnywhere!**
+
+The migration to Django-Q means this application now works seamlessly on PythonAnywhere and any other platform:
+
+1. **Setup Django-Q Worker on PythonAnywhere:**
+   - Go to Tasks tab → "Always-on tasks" section
+   - Command: `source /path/to/venv/bin/activate && python manage.py qcluster`
+   - This runs the Django-Q worker cluster continuously
+   - See: https://help.pythonanywhere.com/pages/AlwaysOnTasks
+
+2. **Monitor Tasks:**
+   - Access Django admin: `https://yoursite.pythonanywhere.com/admin/`
+   - Navigate to "Django Q" → "Tasks" to see task status
+   - View successful, failed, and scheduled tasks
+   - Check task logs and execution history
+
+3. **Fallback Mechanism** (Already Implemented)
+   - If Django-Q worker isn't running, tasks execute synchronously
+   - The codebase has a fallback in `tailoring/frontend_views.py`
+   - This works but blocks the web request (not ideal for production)
+   - Always run `qcluster` for best performance
+
+**For Other Hosting Providers:**
+- **Heroku**: Add worker dyno with `python manage.py qcluster` command
+- **DigitalOcean**: Run qcluster as systemd service
+- **AWS/Google Cloud**: Deploy qcluster in container or EC2/Compute Engine instance
+- **Any VPS**: Use supervisor or systemd to keep qcluster running
+
+No Redis, no external brokers, no complexity - just Django and MySQL.
 
 ## Old scripts & docs
 

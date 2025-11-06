@@ -1,12 +1,11 @@
 """
-Celery tasks for the tailoring app.
+Background tasks for the tailoring app using Django-Q.
 """
 import json
 import logging
 import traceback
 from typing import List
 
-from celery import shared_task
 from django.db import transaction
 from django.utils import timezone
 
@@ -25,12 +24,12 @@ def _format_debug_entries(entries: List[str]) -> str:
     return "\n".join(entries)
 
 
-@shared_task(bind=True, max_retries=3, default_retry_delay=120)
-def process_tailoring_session(self, session_id: int) -> None:
+def process_tailoring_session(session_id: int) -> None:
     """
     Background task that orchestrates a tailoring session.
-
+    
     This task is idempotent and safe to re-run while a session is pending.
+    Can be called directly or queued via Django-Q's async_task().
     """
     debug_entries: List[str] = []
 
@@ -246,22 +245,8 @@ def process_tailoring_session(self, session_id: int) -> None:
         traceback_str = traceback.format_exc()
         log_debug(f"Unexpected error: {exc}")
 
-        if self.request.retries < self.max_retries:
-            log_debug(f"Retrying task (attempt {self.request.retries + 1}) in 2 minutes.")
-            with transaction.atomic():
-                try:
-                    session = (
-                        TailoringSession.objects.select_for_update()
-                        .select_related("user", "job")
-                        .get(id=session_id)
-                    )
-                    session.debug_log = _format_debug_entries(debug_entries)
-                    session.save(update_fields=["debug_log", "updated_at"])
-                except TailoringSession.DoesNotExist:
-                    log_debug("Session missing during retry preparation.")
-                    return
-            raise self.retry(exc=exc)
-
+        # Mark session as failed and save debug info
+        # Django-Q will handle retries automatically based on Q_CLUSTER settings
         with transaction.atomic():
             try:
                 session = TailoringSession.objects.select_for_update().get(id=session_id)
@@ -270,4 +255,7 @@ def process_tailoring_session(self, session_id: int) -> None:
                 session.debug_log = _format_debug_entries(debug_entries + [traceback_str])
                 session.save(update_fields=["status", "error_message", "debug_log", "updated_at"])
             except TailoringSession.DoesNotExist:
-                log_debug("Session missing during final failure handling.")
+                log_debug("Session missing during failure handling.")
+        
+        # Re-raise to let Django-Q know the task failed
+        raise
