@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 
 from accounts.utils import check_and_increment_tokens
 from experience.models import ExperienceGraph
@@ -56,9 +57,10 @@ class TailoringSessionViewSet(viewsets.ModelViewSet):
         # Validate input
         create_serializer = TailoringSessionCreateSerializer(data=request.data)
         create_serializer.is_valid(raise_exception=True)
-        
+
         job_id = create_serializer.validated_data['job_id']
-        
+        user_parameter_input = create_serializer.validated_data.get('parameters') or {}
+
         # Get job posting
         job = get_object_or_404(JobPosting, id=job_id, user=request.user)
         
@@ -87,29 +89,82 @@ class TailoringSessionViewSet(viewsets.ModelViewSet):
             user=request.user,
             job=job,
             input_experience_snapshot=experience_data,
+            parameters=user_parameter_input,
             status='PROCESSING',
         )
-        
+
         # Call AgentKit service
         try:
             service = AgentKitTailoringService()
-            
+
             # Use raw_description if available; OpenAI will fetch from URL via grounding
             job_description = job.raw_description or ""
             source_url = job.source_url or ""
-            
+
+            normalized_parameters = service.normalize_parameters(user_parameter_input or {})
+
             result = service.run_workflow(
                 job_description=job_description,
                 experience_graph=experience_data,
+                parameters=normalized_parameters,
                 source_url=source_url
             )
-            
-            # Update session with results
+
+            token_usage = result.get("token_usage", {})
+            words_generated = result.get("words_generated", 0)
+            if words_generated:
+                token_usage = {**token_usage, "words_generated": words_generated}
+
             session.generated_title = result.get('title', '')
             session.generated_bullets = result.get('bullets', [])
-            session.status = 'COMPLETED'
-            session.save()
-            
+            session.generated_sections = result.get('sections', [])
+            session.tailored_resume = result.get('summary', '')
+
+            ats_score = result.get("ats_score", {})
+            suggestions = result.get("suggestions", [])
+            if ats_score:
+                ats_summary = (
+                    f"📊 ATS Compatibility: {ats_score.get('overall_score', 0)}% | "
+                    f"Required Skills: {ats_score.get('required_skills_match', 0)}% | "
+                    f"Keywords: {ats_score.get('keyword_match', 0)}%"
+                )
+                suggestions = [ats_summary] + suggestions
+
+            guardrail_report = result.get("guardrail_report", [])
+            cover_letter_points = result.get("cover_letter_talking_points", [])
+
+            session.ai_suggestions = "\n".join(suggestions)
+            session.cover_letter = result.get('cover_letter', '')
+            session.token_usage = token_usage
+            session.openai_run_id = result.get('run_id', '')
+            session.parameters = normalized_parameters
+            session.output_metadata = {
+                "bullet_details": result.get("bullet_details", []),
+                "guardrails": guardrail_report,
+                "bullet_quality": result.get("bullet_quality", {}),
+                "section_layout": result.get("section_layout", []),
+                "cover_letter_talking_points": cover_letter_points,
+            }
+            session.status = TailoringSession.Status.COMPLETED
+            session.completed_at = timezone.now()
+            session.save(
+                update_fields=[
+                    "generated_title",
+                    "generated_bullets",
+                    "generated_sections",
+                    "tailored_resume",
+                    "ai_suggestions",
+                    "cover_letter",
+                    "token_usage",
+                    "openai_run_id",
+                    "parameters",
+                    "output_metadata",
+                    "status",
+                    "completed_at",
+                    "updated_at",
+                ]
+            )
+
         except NotImplementedError:
             # Service not yet implemented
             session.status = 'FAILED'
@@ -171,29 +226,83 @@ class TailoringSessionViewSet(viewsets.ModelViewSet):
             user=request.user,
             job=original_session.job,
             input_experience_snapshot=experience_data,
+            parameters=original_session.parameters,
             status='PROCESSING',
         )
-        
+
         # Call AgentKit service
         try:
             service = AgentKitTailoringService()
             job = original_session.job
-            
+
             # Use raw_description if available; OpenAI will fetch from URL via grounding
             job_description = job.raw_description or ""
             source_url = job.source_url or ""
-            
+
+            normalized_parameters = service.normalize_parameters(original_session.parameters or {})
+
             result = service.run_workflow(
                 job_description=job_description,
                 experience_graph=experience_data,
+                parameters=normalized_parameters,
                 source_url=source_url
             )
-            
+
+            token_usage = result.get("token_usage", {})
+            words_generated = result.get("words_generated", 0)
+            if words_generated:
+                token_usage = {**token_usage, "words_generated": words_generated}
+
             new_session.generated_title = result.get('title', '')
             new_session.generated_bullets = result.get('bullets', [])
-            new_session.status = 'COMPLETED'
-            new_session.save()
-            
+            new_session.generated_sections = result.get('sections', [])
+            new_session.tailored_resume = result.get('summary', '')
+
+            ats_score = result.get("ats_score", {})
+            suggestions = result.get('suggestions', [])
+            if ats_score:
+                ats_summary = (
+                    f"📊 ATS Compatibility: {ats_score.get('overall_score', 0)}% | "
+                    f"Required Skills: {ats_score.get('required_skills_match', 0)}% | "
+                    f"Keywords: {ats_score.get('keyword_match', 0)}%"
+                )
+                suggestions = [ats_summary] + suggestions
+
+            guardrail_report = result.get('guardrail_report', [])
+            cover_letter_points = result.get("cover_letter_talking_points", [])
+
+            new_session.ai_suggestions = "\n".join(suggestions)
+            new_session.cover_letter = result.get('cover_letter', '')
+            new_session.token_usage = token_usage
+            new_session.openai_run_id = result.get('run_id', '')
+            new_session.parameters = normalized_parameters
+            new_session.output_metadata = {
+                "bullet_details": result.get("bullet_details", []),
+                "guardrails": guardrail_report,
+                "bullet_quality": result.get("bullet_quality", {}),
+                "section_layout": result.get("section_layout", []),
+                "cover_letter_talking_points": cover_letter_points,
+            }
+            new_session.status = TailoringSession.Status.COMPLETED
+            new_session.completed_at = timezone.now()
+            new_session.save(
+                update_fields=[
+                    "generated_title",
+                    "generated_bullets",
+                    "generated_sections",
+                    "tailored_resume",
+                    "ai_suggestions",
+                    "cover_letter",
+                    "token_usage",
+                    "openai_run_id",
+                    "parameters",
+                    "output_metadata",
+                    "status",
+                    "completed_at",
+                    "updated_at",
+                ]
+            )
+
         except NotImplementedError:
             new_session.status = 'FAILED'
             new_session.save()

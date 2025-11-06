@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'rest_framework.authtoken',
+    'django_q',  # Django-Q for background tasks
     # Project apps
     'accounts',
     'profiles',
@@ -166,19 +167,19 @@ OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
 MAPBOX_TOKEN = os.environ.get('MAPBOX_TOKEN', '')
 OPENAI_MODEL = os.environ.get('OPENAI_MODEL', 'gpt-4o-mini')
 
-# Celery / task queue configuration
-CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
-CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', CELERY_BROKER_URL)
-CELERY_ACCEPT_CONTENT = ['json']
-CELERY_TASK_SERIALIZER = 'json'
-CELERY_RESULT_SERIALIZER = 'json'
-CELERY_TASK_DEFAULT_QUEUE = os.environ.get('CELERY_TASK_DEFAULT_QUEUE', 'tailoring')
-CELERY_TASK_ALWAYS_EAGER = os.environ.get('CELERY_TASK_ALWAYS_EAGER', 'False') == 'True'
-CELERY_TASK_TIME_LIMIT = int(os.environ.get('CELERY_TASK_TIME_LIMIT', 60 * 10))
-CELERY_TASK_SOFT_TIME_LIMIT = int(os.environ.get('CELERY_TASK_SOFT_TIME_LIMIT', 60 * 8))
-CELERY_WORKER_SEND_TASK_EVENTS = True
-CELERY_TASK_SEND_SENT_EVENT = True
-CELERY_WORKER_HIJACK_ROOT_LOGGER = False
+# Django-Q configuration (replaces Celery+Redis)
+Q_CLUSTER = {
+    'name': 'myapply',
+    'workers': 4,  # Number of worker processes
+    'timeout': 600,  # Task timeout in seconds (10 minutes)
+    'retry': 1200,  # Retry after 20 minutes
+    'queue_limit': 50,  # Max tasks in queue
+    'bulk': 10,  # Number of tasks to process per batch
+    'orm': 'default',  # Use Django ORM (MySQL) as broker
+    'catch_up': True,  # Process missed tasks on startup
+    'save_limit': 250,  # Keep last 250 successful tasks
+    'sync': False,  # Run async (set to True for testing)
+}
 
 LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
 
@@ -214,7 +215,7 @@ LOGGING = {
             'level': 'DEBUG',
             'propagate': False,
         },
-        'celery': {
+        'django_q': {
             'handlers': ['console'],
             'level': LOG_LEVEL,
             'propagate': False,

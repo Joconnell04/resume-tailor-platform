@@ -28,6 +28,7 @@ class TailoringSessionAdmin(admin.ModelAdmin):
         'completed_at',
         'token_usage',
         'openai_run_id',
+        'output_metadata',
     ]
     
     fieldsets = (
@@ -47,6 +48,7 @@ class TailoringSessionAdmin(admin.ModelAdmin):
                 'cover_letter',
                 'ai_suggestions',
                 'token_usage',
+                'output_metadata',
                 'debug_log',
                 'error_message',
             )

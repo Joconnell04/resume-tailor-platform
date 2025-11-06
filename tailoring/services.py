@@ -1,9 +1,15 @@
 """
 Tailoring app services
 
-AgentKit-like service for AI-powered resume tailoring without relying on the
-hosted AgentKit runtime. This module orchestrates prompt construction,
-experience matching, and OpenAI API calls with web search grounding.
+Core service for AI-powered resume tailoring using OpenAI Responses API.
+This module orchestrates:
+- Job requirement extraction and profiling
+- Experience graph scoring and snippet selection
+- OpenAI API calls with conditional JSON mode and web search
+- Guardrail validation and bullet regeneration
+- ATS scoring and quality validation
+
+Designed to work with Django-Q for asynchronous task processing.
 """
 from __future__ import annotations
 
@@ -12,7 +18,7 @@ import logging
 import os
 import re
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from django.conf import settings
 
@@ -57,18 +63,23 @@ class TailoringPipelineError(Exception):
 @dataclass
 class TailoringResult:
     """
-    Structured representation of the OpenAI response payload.
+    Structured representation of the OpenAI response payloads.
     """
 
     title: str = ""
     sections: List[Dict[str, List[str]]] = field(default_factory=list)
     bullets: List[str] = field(default_factory=list)
+    bullet_details: List[Dict[str, object]] = field(default_factory=list)
     summary: str = ""
     suggestions: List[str] = field(default_factory=list)
     cover_letter: str = ""
+    cover_letter_talking_points: List[str] = field(default_factory=list)
     token_usage: Dict[str, int] = field(default_factory=dict)
     run_id: str = ""
+    guardrail_report: List[Dict[str, object]] = field(default_factory=list)
     debug: Dict[str, object] = field(default_factory=dict)
+    job_location_name: str = ""
+    job_location_coordinates: Optional[Dict[str, float]] = None
 
     @property
     def words_generated(self) -> int:
@@ -84,19 +95,118 @@ class TailoringResult:
         return len(re.findall(r"\w+", text))
 
 
+@dataclass
+class JobProfile:
+    """
+    Structured view of job requirements for prompt construction.
+    """
+
+    source_url: str
+    description: str
+    requirements: Dict[str, List[str]]
+    requirement_buckets: Dict[str, List[str]]
+    location_name: str = ""
+    location_coordinates: Optional[Dict[str, float]] = None  # {"lat": float, "lon": float}
+
+    def to_prompt_dict(self) -> Dict[str, object]:
+        return {
+            "source_url": self.source_url,
+            "summary": self.description[:1200],
+            "requirements": self.requirements,
+            "buckets": self.requirement_buckets,
+            "location": self.location_name,
+        }
+
+
+@dataclass
+class ExperienceSnippet:
+    """
+    Experience graph entry distilled for prompt usage.
+    """
+
+    snippet_id: str
+    bucket: str
+    title: str
+    organization: str
+    time_frame: str
+    summary: str
+    achievements: List[str]
+    skills: List[str]
+    source_ref: Dict[str, object]
+
+    def to_prompt_dict(self) -> Dict[str, object]:
+        return {
+            "id": self.snippet_id,
+            "bucket": self.bucket,
+            "title": self.title,
+            "organization": self.organization,
+            "time_frame": self.time_frame,
+            "summary": self.summary,
+            "achievements": self.achievements,
+            "skills": self.skills,
+        }
+
+
+@dataclass
+class GuardrailFinding:
+    """
+    Result from guardrail validation against stretch policy.
+    """
+
+    snippet_id: str
+    bullet_id: str
+    status: str
+    reasons: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, object]:
+        return {
+            "snippet_id": self.snippet_id,
+            "bullet_id": self.bullet_id,
+            "status": self.status,
+            "reasons": self.reasons,
+        }
+
+
 class AgentKitTailoringService:
     """
     Service for AI-powered resume tailoring using the OpenAI Responses API.
     """
 
     DEFAULT_PARAMETERS = {
-        "sections": ["Professional Highlights"],
+        "sections": [
+            "Professional Experience",
+            "Leadership",
+            "Projects",
+        ],
         "bullets_per_section": 3,
         "tone": "confident and metric-driven",
         "include_summary": True,
         "include_cover_letter": False,
         "temperature": 0.35,
-        "max_output_tokens": 900,
+        "max_output_tokens": 2000,  # Increased to accommodate detailed output with job_requirements
+        "stretch_level": 2,
+        "section_layout": [
+            "Professional Experience",
+            "Leadership",
+            "Projects",
+        ],
+        "cover_letter_inserts": [],
+    }
+
+    SECTION_BUCKET_ALIASES = {
+        "professional": "Professional Experience",
+        "leadership": "Leadership",
+        "projects": "Projects",
+        "skills": "Skills & Tools",
+    }
+
+    MAX_SNIPPETS_PER_BUCKET = 3
+
+    STRETCH_LEVEL_DESCRIPTORS = {
+        0: "Exact: No embellishment. Only rephrase provided facts.",
+        1: "Conservative: Allow mild reframing but stay literal to provided facts.",
+        2: "Balanced: Blend facts with light amplification (≤10% metric lift).",
+        3: "Aggressive: Allow up to 20% amplification and reordering for impact.",
     }
 
     TECH_KEYWORDS = {
@@ -216,55 +326,130 @@ class AgentKitTailoringService:
             raise TailoringPipelineError("Job description content is required.")
 
         normalized_parameters = self.normalize_parameters(parameters or {})
+        
+        # When using web search, try to fetch job description first
+        # Note: Many job sites block automated access, so this may fail
+        if source_url and not job_description:
+            logger.info(f"Attempting to fetch job description from URL: {source_url}")
+            fetched_description = self._fetch_job_description_from_url(source_url)
+            
+            if fetched_description:
+                job_description = fetched_description
+                logger.info(f"Successfully fetched {len(job_description)} chars from web search")
+            else:
+                logger.warning(
+                    f"Could not fetch job description from {source_url}. "
+                    f"Website may be blocking automated access. "
+                    f"Will proceed with URL-only mode (requirements extraction will happen during resume generation)."
+                )
+                # Don't fail - we'll still pass the URL to OpenAI for grounding during resume generation
+        
         cleaned_description = self._clean_text(job_description)
         requirements = self._extract_job_requirements(cleaned_description)
-        relevant_experiences = self._match_experiences(requirements, experience_graph)
-
-        prompt = self._build_prompt(
+        job_profile = self._build_job_profile(
             job_description=cleaned_description,
             requirements=requirements,
-            experiences=relevant_experiences,
-            parameters=normalized_parameters,
             source_url=source_url,
         )
 
-        result = self._generate_tailored_content(
-            prompt=prompt, parameters=normalized_parameters, source_url=source_url
+        selected_snippets = self._collect_experience_snippets(
+            experience_graph=experience_graph or {},
+            job_profile=job_profile,
+            limit_per_bucket=self.MAX_SNIPPETS_PER_BUCKET,
         )
 
-        # Calculate ATS compatibility score
+        result = self._generate_resume_package(
+            job_profile=job_profile,
+            selected_snippets=selected_snippets,
+            parameters=normalized_parameters,
+        )
+
+        # Use updated requirements from job_profile (may have been enhanced by web search)
+        final_requirements = job_profile.requirements
+
         all_bullets = result.bullets or self._flatten_sections(result.sections)
         optimizer = ResumeOptimizer()
         ats_score = optimizer.calculate_ats_score(
             bullet_points=all_bullets,
-            job_keywords=requirements.get("keywords", []),
-            required_skills=requirements.get("required_skills", []),
-            preferred_skills=requirements.get("preferred_skills", []),
+            job_keywords=final_requirements.get("keywords", []),
+            required_skills=final_requirements.get("required_skills", []),
+            preferred_skills=final_requirements.get("preferred_skills", []),
         )
-        
-        # Validate bullet points for quality
+
         bullet_validations = []
-        for bullet in all_bullets[:10]:  # Validate first 10 bullets
-            validation = optimizer.validate_bullet_point(bullet)
+        for detail in result.bullet_details[:10]:
+            bullet_text = detail.get("text") or ""
+            validation = optimizer.validate_bullet_point(bullet_text)
             if not validation["valid"] or validation.get("suggestions"):
-                bullet_validations.append({
-                    "bullet": bullet[:50] + "..." if len(bullet) > 50 else bullet,
-                    "issues": validation.get("issues", []),
-                    "suggestions": validation.get("suggestions", []),
-                })
+                bullet_validations.append(
+                    {
+                        "bullet": bullet_text[:50] + "..." if len(bullet_text) > 50 else bullet_text,
+                        "issues": validation.get("issues", []),
+                        "suggestions": validation.get("suggestions", []),
+                    }
+                )
+
+        # Combine AI suggestions with ATS insights intelligently
+        enhanced_suggestions = []
         
-        # Enhance suggestions with ATS findings
-        enhanced_suggestions = list(result.suggestions)
-        if ats_score["missing_critical"]:
-            enhanced_suggestions.insert(
-                0, 
-                f"Add required skills: {', '.join(ats_score['missing_critical'][:3])}"
-            )
+        # Start with ATS-specific critical findings
+        if ats_score["missing_critical"] and len(ats_score["missing_critical"]) > 0:
+            # Filter out single-letter or trivial terms
+            meaningful_missing = [
+                skill for skill in ats_score["missing_critical"][:5] 
+                if len(skill) > 2 and skill.lower() not in ['aid', 'the', 'and', 'or']
+            ]
+            if meaningful_missing:
+                if len(meaningful_missing) == 1:
+                    enhanced_suggestions.append(
+                        f"Add required skill: {meaningful_missing[0]} - Include specific examples from your experience"
+                    )
+                else:
+                    enhanced_suggestions.append(
+                        f"Add required skills: {', '.join(meaningful_missing[:3])} - Weave these into your achievement descriptions"
+                    )
+        
+        # Add AI-generated suggestions (these are more contextual)
+        if result.suggestions:
+            # Filter out generic/unhelpful suggestions
+            quality_suggestions = [
+                s for s in result.suggestions 
+                if len(s) > 20 and not s.lower().startswith(('enhance', 'improve', 'emphasize'))
+            ]
+            enhanced_suggestions.extend(quality_suggestions[:3])
+        
+        # Add ATS score context if it needs improvement
         if ats_score["overall_score"] < 70:
-            enhanced_suggestions.insert(
-                0,
-                f"ATS Score: {ats_score['overall_score']}% - Improve keyword coverage"
+            enhanced_suggestions.append(
+                f"ATS Score: {ats_score['overall_score']}% - Focus on incorporating missing required skills with concrete examples"
             )
+        elif ats_score["overall_score"] >= 85:
+            enhanced_suggestions.append(
+                f"Strong ATS Score: {ats_score['overall_score']}% - Your resume aligns well with job requirements"
+            )
+        
+        # If we don't have enough quality suggestions, add ATS insights
+        if len(enhanced_suggestions) < 3 and ats_score.get("suggestions"):
+            for suggestion in ats_score["suggestions"]:
+                if len(enhanced_suggestions) >= 5:
+                    break
+                if suggestion not in enhanced_suggestions:
+                    enhanced_suggestions.append(suggestion)
+
+        guardrail_dict = [finding for finding in result.guardrail_report]
+
+        debug_payload = {
+            "requirements": final_requirements,
+            "job_profile": job_profile.to_prompt_dict(),
+            "selected_snippets": {
+                bucket: [snippet.to_prompt_dict() for snippet in snippets]
+                for bucket, snippets in selected_snippets.items()
+            },
+            "parameters": normalized_parameters,
+            "resume_generation": result.debug.get("resume_generation"),
+            "guardrails": guardrail_dict,
+            "cover_letter_generation": result.debug.get("cover_letter_generation"),
+        }
 
         return {
             "title": result.title,
@@ -273,23 +458,559 @@ class AgentKitTailoringService:
             "summary": result.summary,
             "suggestions": enhanced_suggestions,
             "cover_letter": result.cover_letter,
+            "cover_letter_talking_points": result.cover_letter_talking_points,
+            "bullet_details": result.bullet_details,
             "token_usage": result.token_usage,
             "run_id": result.run_id,
             "ats_score": ats_score,
             "bullet_quality": {
                 "total_bullets": len(all_bullets),
                 "issues_found": len(bullet_validations),
-                "validations": bullet_validations[:5],  # Top 5 issues
+                "validations": bullet_validations[:5],
+                "guardrails": guardrail_dict,
             },
-            "debug": {
-                "requirements": requirements,
-                "selected_experiences": relevant_experiences,
-                "parameters": normalized_parameters,
-                "openai_response": result.debug.get("raw_payload"),
-                "ats_analysis": ats_score,
-            },
+            "guardrail_report": guardrail_dict,
+            "section_layout": normalized_parameters.get("section_layout", []),
+            "debug": debug_payload,
             "words_generated": result.words_generated,
         }
+
+    def _generate_resume_package(
+        self,
+        *,
+        job_profile: JobProfile,
+        selected_snippets: Dict[str, List[ExperienceSnippet]],
+        parameters: Dict[str, object],
+    ) -> TailoringResult:
+        token_usage_totals = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+        debug_refs: Dict[str, Any] = {}
+
+        section_plan = self._plan_sections(selected_snippets, parameters.get("section_layout", []))
+        experience_payload = self._snippets_prompt_payload(selected_snippets)
+
+        stretch_level = parameters.get("stretch_level", 2)
+        stretch_guidance = self.STRETCH_LEVEL_DESCRIPTORS.get(
+            stretch_level,
+            "Balanced: Blend facts with light amplification (≤10% metric lift).",
+        )
+
+        bullets_per_section = parameters.get("bullets_per_section", 3)
+        
+        generation_payload = {
+            "job_profile": job_profile.to_prompt_dict(),
+            "experience_snippets": experience_payload,
+            "section_plan": section_plan,
+            "parameters": {
+                "tone": parameters.get("tone"),
+                "bullets_per_section": bullets_per_section,
+                "include_summary": parameters.get("include_summary", True),
+                "stretch_level": stretch_level,
+                "stretch_guidance": stretch_guidance,
+            },
+            "generation_rules": [
+                f"CRITICAL: Generate EXACTLY {bullets_per_section} bullet points for EACH section listed in section_plan. DO NOT generate more bullets for one section and fewer for another.",
+                f"Each section in your output must contain exactly {bullets_per_section} bullets - no more, no fewer. Distribute bullets evenly across all sections.",
+                "Use snippet achievements verbatim where possible; never invent employers or roles.",
+                "Start every bullet with a strong action verb (Built, Architected, Developed, Led, Optimized, etc.) and include quantifiable metrics when provided.",
+                "Respect the stretch guidance—do not exceed the allowed exaggeration from source achievements.",
+                "Maintain ATS-friendly length (100-180 characters) and mirror critical job keywords naturally, while sounding like a human.",
+                "Return bullet objects with snippet references and stretch assessment (0-3).",
+                "NEVER use '+' as substitutes for 'and' - always spell out 'and' in full (e.g., 'React and TypeScript', not 'React + TypeScript').",
+                "Write in complete, professional sentences with proper grammar and punctuation.",
+                "Provide context for each achievement: explain WHAT you built, WHY it mattered, and the IMPACT it delivered.",
+                "Use industry-standard terminology and avoid casual language or abbreviations without context.",
+                "When mentioning technologies, integrate them naturally into the achievement narrative rather than listing them.",
+                "Quantify impact with specific metrics: percentages, dollar amounts, time savings, user counts, or performance improvements.",
+                "Ensure each bullet demonstrates business value, not just technical tasks completed.",
+                "Avoid redundant or vague phrases like 'enhancing user experience' - be specific about the enhancement and its measurable outcome.",
+            ],
+            "output_schema": {
+                "title": "str - Job title the candidate is targeting",
+                "summary": "optional str - 2-3 sentence compelling value proposition tailored to this specific role",
+                "job_location": {
+                    "city": "optional str",
+                    "state": "optional str",
+                    "country": "optional str",
+                    "latitude": "optional float",
+                    "longitude": "optional float",
+                },
+                "job_requirements": {
+                    "description": "optional str - When using web search, include extracted job description here",
+                    "required_skills": "optional list[str] - Required technical and soft skills",
+                    "preferred_skills": "optional list[str] - Preferred/nice-to-have skills",
+                    "responsibilities": "optional list[str] - Key responsibilities",
+                    "qualifications": "optional list[str] - Required qualifications",
+                },
+                "sections": [
+                    {
+                        "name": "str - Section name from section_plan",
+                        "bullets": f"Array of EXACTLY {bullets_per_section} bullet objects (not fewer, not more). Each bullet must be a separate object:",
+                        "bullet_structure": {
+                            "id": "str",
+                            "snippet_id": "str",
+                            "text": "str - Complete sentence with strong action verb, context, and quantifiable impact",
+                            "stretch": "int 0-3",
+                            "metrics": "optional list[str]",
+                        },
+                    }
+                ],
+                "suggestions": [
+                    "str - Specific, actionable recommendations (e.g., 'Add experience with containerization using Docker or Kubernetes to align with DevOps requirements', NOT generic advice like 'Emphasize technical skills')"
+                ],
+            },
+        }
+
+        grounding = None
+        if job_profile.source_url:
+            grounding = {
+                "type": "web_search",
+                "web_search": {
+                    "queries": [f"job posting {job_profile.source_url}"]
+                },
+            }
+            # Include URL in the payload so the model knows to search for it
+            generation_payload["job_posting_url"] = job_profile.source_url
+
+        # Build instructions - make JSON requirement explicit when using web search
+        base_instructions = (
+            "You are an elite resume strategist specializing in ATS-optimized, results-driven professional documents. "
+            "Your goal is to craft compelling bullet points that pass ATS screening while showcasing quantifiable impact.\n\n"
+            
+            "CRITICAL WRITING STANDARDS:\n"
+            "- NEVER use '+' as abbreviations for 'and' (write 'React and TypeScript', not 'React + TypeScript')\n"
+            "- Use complete, professional sentences with proper grammar\n"
+            "- Integrate technologies naturally within achievement narratives, not as standalone lists\n"
+            "- Start each bullet with strong action verbs: Architected, Engineered, Optimized, Spearheaded, etc.\n\n"
+            
+            "BULLET POINT QUALITY REQUIREMENTS:\n"
+            "- Provide full context: WHAT was built, WHY it mattered (business need), and IMPACT delivered\n"
+            "- Include specific, quantifiable metrics: percentages, dollar amounts, time savings, scale (users/requests/data volume)\n"
+            "- Demonstrate business value and outcomes, not just technical tasks\n"
+            "- Avoid vague phrases like 'enhancing user experience' - quantify the enhancement\n"
+            "- Each bullet should tell a mini-story of problem → solution → measurable result\n\n"
+            
+            "ATS OPTIMIZATION:\n"
+            "- Mirror job posting keywords naturally within achievement descriptions\n"
+            "- Maintain 100-180 character length for optimal ATS parsing\n"
+            "- Use industry-standard terminology that matches the job description\n"
+            "- Ensure required skills appear in context, not as disconnected terms\n\n"
+            
+            "PROFESSIONAL SUMMARY GUIDELINES:\n"
+            "- Write a compelling 2-3 sentence value proposition tailored to this specific role\n"
+            "- Lead with years of experience and core expertise areas\n"
+            "- Highlight 2-3 key achievements or specializations that align with job requirements\n"
+            "- Avoid generic statements - make it specific to the candidate's background and this opportunity\n\n"
+            
+            "AI SUGGESTIONS REQUIREMENTS:\n"
+            "- Provide 3-5 specific, actionable recommendations (not generic platitudes)\n"
+            "- Focus on gaps between candidate experience and job requirements\n"
+            "- Suggest concrete ways to strengthen keyword coverage with real examples\n"
+            "- Identify missing technical skills or certifications that would improve candidacy\n"
+            "- Recommend quantifiable metrics that could be added if the candidate provides them\n\n"
+        )
+        
+        if grounding:
+            # When using web search, be extremely explicit about JSON format requirement
+            instructions = (
+                base_instructions +
+                "OUTPUT FORMAT (CRITICAL - READ CAREFULLY):\n"
+                "- If job_posting_url is provided, use web search to get complete job posting details\n"
+                "- Extract job location with approximate latitude/longitude if possible\n"
+                "- CRITICALLY IMPORTANT: Extract and include the job requirements in the job_requirements field:\n"
+                "  * description: Full job description text\n"
+                "  * required_skills: List of must-have technical and soft skills\n"
+                "  * preferred_skills: List of nice-to-have skills\n"
+                "  * responsibilities: Key duties and responsibilities\n"
+                "  * qualifications: Required qualifications (education, experience, etc.)\n"
+                "- YOU MUST RETURN ONLY A SINGLE VALID JSON OBJECT - NO NARRATIVE TEXT, NO MARKDOWN, NO EXPLANATIONS\n"
+                "- DO NOT write any introductory text like 'Based on...', 'Here is...', etc.\n"
+                "- DO NOT wrap the JSON in markdown code blocks (no ```json or ``` markers)\n"
+                "- DO NOT include any text before or after the JSON object\n"
+                "- START YOUR RESPONSE WITH THE OPENING { CHARACTER\n"
+                "- END YOUR RESPONSE WITH THE CLOSING } CHARACTER\n"
+                "- The JSON must exactly match the provided output_schema structure\n"
+                "- All text fields must be professional, polished, and ready for direct use in a resume"
+            )
+        else:
+            instructions = (
+                base_instructions +
+                "OUTPUT FORMAT:\n"
+                "- Extract job location with approximate latitude/longitude if possible\n"
+                "- Return pure JSON matching the schema (no markdown, no code blocks, no extra text)\n"
+                "- Ensure all text fields are professional, polished, and ready for direct use in a resume"
+            )
+
+        resume_payload, run_id, resume_usage = self._call_openai_json(
+            instructions=instructions,
+            payload=generation_payload,
+            temperature=float(parameters.get("temperature", 0.35)),
+            max_output_tokens=int(parameters.get("max_output_tokens", 2000)),
+            grounding=grounding,
+        )
+
+        debug_refs["resume_generation"] = resume_payload
+        self._merge_usage(token_usage_totals, resume_usage)
+
+        # Extract job requirements if provided by the model (when using web search)
+        job_requirements = resume_payload.get("job_requirements", {})
+        if job_requirements and isinstance(job_requirements, dict):
+            # Update job_profile with extracted requirements
+            if job_requirements.get("description"):
+                extracted_desc = str(job_requirements["description"])
+                if len(extracted_desc) > len(job_profile.description):
+                    logger.info(f"Updating job profile with {len(extracted_desc)} chars from AI web search")
+                    job_profile.description = extracted_desc
+                    
+                    # Re-extract requirements from the AI-provided description
+                    updated_requirements = self._extract_job_requirements(extracted_desc)
+                    job_profile.requirements = updated_requirements
+                    job_profile.requirement_buckets = self._bucketize_requirements(updated_requirements)
+                    logger.info(
+                        f"Extracted from AI response: {len(updated_requirements.get('keywords', []))} keywords, "
+                        f"{len(updated_requirements.get('required_skills', []))} required skills"
+                    )
+            
+            # Also extract direct skill lists if provided
+            if job_requirements.get("required_skills"):
+                existing_required = set(job_profile.requirements.get("required_skills", []))
+                ai_required = [str(s) for s in job_requirements["required_skills"]]
+                job_profile.requirements["required_skills"] = sorted(existing_required | set(ai_required))
+            
+            if job_requirements.get("preferred_skills"):
+                existing_preferred = set(job_profile.requirements.get("preferred_skills", []))
+                ai_preferred = [str(s) for s in job_requirements["preferred_skills"]]
+                job_profile.requirements["preferred_skills"] = sorted(existing_preferred | set(ai_preferred))
+
+        # Extract location data if provided by the model
+        job_location = resume_payload.get("job_location", {})
+        if job_location and isinstance(job_location, dict):
+            lat = job_location.get("latitude")
+            lon = job_location.get("longitude")
+            if lat is not None and lon is not None:
+                job_profile.location_coordinates = {"lat": float(lat), "lon": float(lon)}
+            city_parts = []
+            if job_location.get("city"):
+                city_parts.append(str(job_location["city"]))
+            if job_location.get("state"):
+                city_parts.append(str(job_location["state"]))
+            if job_location.get("country"):
+                city_parts.append(str(job_location["country"]))
+            if city_parts:
+                job_profile.location_name = ", ".join(city_parts)
+
+        sections, flat_bullets, bullet_details = self._parse_resume_sections(
+            resume_payload,
+            default_stretch=stretch_level,
+        )
+        
+        # Validate bullet distribution across sections
+        expected_bullets = bullets_per_section
+        section_counts = {}
+        for section in sections:
+            section_name = section.get("name", "Unknown")
+            bullet_count = len(section.get("bullets", []))
+            section_counts[section_name] = bullet_count
+            
+            if bullet_count != expected_bullets:
+                logger.warning(
+                    f"Section '{section_name}' has {bullet_count} bullets, expected {expected_bullets}. "
+                    f"Distribution: {section_counts}"
+                )
+
+        result = TailoringResult(
+            title=str(resume_payload.get("title", "")),
+            sections=sections,
+            bullets=flat_bullets,
+            bullet_details=bullet_details,
+            summary=str(resume_payload.get("summary", ""))
+            if parameters.get("include_summary", True)
+            else "",
+            suggestions=[str(s) for s in (resume_payload.get("suggestions") or [])],
+            cover_letter="",
+            cover_letter_talking_points=[],
+            token_usage=dict(token_usage_totals),
+            run_id=run_id,
+            guardrail_report=[],
+            debug={"resume_generation": resume_payload},
+            job_location_name=job_profile.location_name,
+            job_location_coordinates=job_profile.location_coordinates,
+        )
+
+        snippet_map = self._snippets_by_id(selected_snippets)
+        guard_report, guard_usage, guard_debug, replacements = self._apply_guardrails(
+            job_profile=job_profile,
+            parameters=parameters,
+            bullet_details=result.bullet_details,
+            snippet_map=snippet_map,
+        )
+
+        if guard_debug:
+            debug_refs["guardrails"] = guard_debug
+        if guard_report:
+            result.guardrail_report = guard_report
+        if guard_usage:
+            self._merge_usage(token_usage_totals, guard_usage)
+            result.token_usage = dict(token_usage_totals)
+
+        if replacements:
+            bullet_lookup = {detail["id"]: detail for detail in result.bullet_details}
+            for bullet_id, replacement in replacements.items():
+                if bullet_id in bullet_lookup:
+                    bullet_lookup[bullet_id].update({
+                        "text": replacement.get("text", bullet_lookup[bullet_id]["text"]),
+                        "stretch": replacement.get("stretch", bullet_lookup[bullet_id].get("stretch")),
+                        "metrics": replacement.get("metrics", bullet_lookup[bullet_id].get("metrics")),
+                    })
+
+            updated_details = list(bullet_lookup.values())
+            result.bullet_details = updated_details
+            sections, flat_bullets = self._compose_sections_from_details(updated_details)
+            result.sections = sections
+            result.bullets = flat_bullets
+
+        if parameters.get("include_cover_letter", False):
+            cover_letter, talking_points, cover_usage, cover_debug = self._generate_cover_letter(
+                job_profile=job_profile,
+                selected_snippets=selected_snippets,
+                parameters=parameters,
+            )
+            result.cover_letter = cover_letter
+            result.cover_letter_talking_points = talking_points
+            if cover_usage:
+                self._merge_usage(token_usage_totals, cover_usage)
+                result.token_usage = dict(token_usage_totals)
+            if cover_debug:
+                debug_refs["cover_letter_generation"] = cover_debug
+
+        result.token_usage = dict(token_usage_totals)
+        result.debug.update(debug_refs)
+
+        return result
+
+    def _apply_guardrails(
+        self,
+        *,
+        job_profile: JobProfile,
+        parameters: Dict[str, object],
+        bullet_details: List[Dict[str, object]],
+        snippet_map: Dict[str, ExperienceSnippet],
+    ) -> Tuple[List[Dict[str, object]], Dict[str, int], Optional[Dict[str, Any]], Dict[str, Dict[str, object]]]:
+        if not bullet_details:
+            return [], {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}, None, {}
+
+        stretch_level = parameters.get("stretch_level", 2)
+        stretch_guidance = self.STRETCH_LEVEL_DESCRIPTORS.get(
+            stretch_level,
+            "Balanced: Blend facts with light amplification (≤10% metric lift).",
+        )
+
+        snippet_payload = {
+            snippet_id: {
+                "summary": snippet.summary,
+                "achievements": snippet.achievements,
+                "skills": snippet.skills,
+                "time_frame": snippet.time_frame,
+            }
+            for snippet_id, snippet in snippet_map.items()
+        }
+
+        candidate_payload = []
+        for detail in bullet_details:
+            candidate_payload.append(
+                {
+                    "bullet_id": detail.get("id"),
+                    "snippet_id": detail.get("snippet_id"),
+                    "text": detail.get("text"),
+                    "stretch": detail.get("stretch"),
+                    "section": detail.get("section"),
+                }
+            )
+
+        guard_payload = {
+            "stretch_policy": {
+                "level": stretch_level,
+                "guidance": stretch_guidance,
+            },
+            "job_keywords": job_profile.requirements.get("keywords", []),
+            "required_skills": job_profile.requirements.get("required_skills", []),
+            "bullet_candidates": candidate_payload,
+            "snippets": snippet_payload,
+        }
+
+        guard_response, _guard_run_id, guard_usage = self._call_openai_json(
+            instructions=(
+                "You audit resume bullets against their source snippets. For each candidate, return a status of"
+                " 'ok', 'needs_revision', or 'reject'. Flag 'reject' if claims exceed snippet facts or stretch policy."
+            ),
+            payload=guard_payload,
+            temperature=0.0,
+            max_output_tokens=1200,  # Increased for larger bullet lists with detailed analysis
+        )
+
+        findings_raw = guard_response.get("findings") or []
+        guard_report: List[Dict[str, object]] = []
+        flagged: List[Dict[str, object]] = []
+        for finding in findings_raw:
+            snippet_id = str(finding.get("snippet_id", ""))
+            bullet_id = str(finding.get("bullet_id", ""))
+            status = str(finding.get("status", "ok")).lower() or "ok"
+            reasons = [str(reason) for reason in (finding.get("reasons") or [])]
+            guard_item = GuardrailFinding(
+                snippet_id=snippet_id,
+                bullet_id=bullet_id,
+                status=status,
+                reasons=reasons,
+            ).to_dict()
+            guard_report.append(guard_item)
+            if status in {"reject", "needs_revision"}:
+                flagged.append({
+                    "bullet_id": bullet_id,
+                    "snippet_id": snippet_id,
+                    "status": status,
+                    "reasons": reasons,
+                    "original_text": next(
+                        (detail.get("text") for detail in bullet_details if detail.get("id") == bullet_id),
+                        "",
+                    ),
+                })
+
+        replacements: Dict[str, Dict[str, object]] = {}
+        regen_debug: Optional[Dict[str, Any]] = None
+        regen_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+
+        if flagged:
+            replacements, regen_usage, regen_debug = self._regenerate_bullets(
+                flagged=flagged,
+                snippet_map=snippet_map,
+                job_profile=job_profile,
+                parameters=parameters,
+            )
+
+        combined_usage = {
+            key: guard_usage.get(key, 0) + regen_usage.get(key, 0)
+            for key in ("prompt_tokens", "completion_tokens", "total_tokens")
+        }
+
+        guard_debug = {"analysis": guard_response}
+        if regen_debug:
+            guard_debug["regeneration"] = regen_debug
+
+        return guard_report, combined_usage, guard_debug, replacements
+
+    def _regenerate_bullets(
+        self,
+        *,
+        flagged: List[Dict[str, object]],
+        snippet_map: Dict[str, ExperienceSnippet],
+        job_profile: JobProfile,
+        parameters: Dict[str, object],
+    ) -> Tuple[Dict[str, Dict[str, object]], Dict[str, int], Optional[Dict[str, Any]]]:
+        if not flagged:
+            return {}, {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}, None
+
+        stretch_level = parameters.get("stretch_level", 2)
+        stretch_guidance = self.STRETCH_LEVEL_DESCRIPTORS.get(
+            stretch_level,
+            "Balanced: Blend facts with light amplification (≤10% metric lift).",
+        )
+
+        regeneration_payload = {
+            "stretch_policy": {
+                "level": stretch_level,
+                "guidance": stretch_guidance,
+            },
+            "job_keywords": job_profile.requirements.get("keywords", []),
+            "requests": [],
+        }
+
+        for item in flagged:
+            snippet = snippet_map.get(item.get("snippet_id"))
+            if not snippet:
+                continue
+            regeneration_payload["requests"].append(
+                {
+                    "bullet_id": item.get("bullet_id"),
+                    "snippet_id": snippet.snippet_id,
+                    "original_text": item.get("original_text", ""),
+                    "reasons": item.get("reasons", []),
+                    "snippet": {
+                        "summary": snippet.summary,
+                        "achievements": snippet.achievements,
+                        "skills": snippet.skills,
+                        "time_frame": snippet.time_frame,
+                    },
+                }
+            )
+
+        if not regeneration_payload["requests"]:
+            return {}, {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}, None
+
+        regen_response, _regen_run_id, regen_usage = self._call_openai_json(
+            instructions=(
+                "Rewrite only the flagged bullets using the provided snippet data. Keep within the stretch policy"
+                " and output JSON with replacements for each bullet_id."
+            ),
+            payload=regeneration_payload,
+            temperature=0.2,
+            max_output_tokens=400,
+        )
+
+        replacements_raw = regen_response.get("replacements") or []
+        replacements: Dict[str, Dict[str, object]] = {}
+        for item in replacements_raw:
+            bullet_id = str(item.get("bullet_id"))
+            if not bullet_id:
+                continue
+            replacements[bullet_id] = {
+                "text": str(item.get("text", "")).strip(),
+                "stretch": int(item.get("stretch", stretch_level)),
+                "metrics": item.get("metrics"),
+            }
+
+        return replacements, regen_usage, regen_response
+
+    def _generate_cover_letter(
+        self,
+        *,
+        job_profile: JobProfile,
+        selected_snippets: Dict[str, List[ExperienceSnippet]],
+        parameters: Dict[str, object],
+    ) -> Tuple[str, List[str], Dict[str, int], Optional[Dict[str, Any]]]:
+        snippet_payload = self._snippets_prompt_payload(selected_snippets)
+        inserts = parameters.get("cover_letter_inserts", []) or []
+
+        cover_payload = {
+            "job_profile": job_profile.to_prompt_dict(),
+            "experience_snippets": snippet_payload,
+            "tone": parameters.get("tone", "confident and metric-driven"),
+            "stretch_level": parameters.get("stretch_level", 2),
+            "user_inserts": inserts,
+            "structure": [
+                "Paragraph 1: hook that mirrors job mission and highlights relevant experience.",
+                "Paragraph 2: connect top 2-3 snippets to job requirements with metrics.",
+                "Paragraph 3: close with enthusiasm, availability, and call-to-action.",
+            ],
+            "output_schema": {
+                "cover_letter": "3 paragraphs separated by blank lines",
+                "talking_points": "list[str] of 3-5 key highlights",
+            },
+        }
+
+        cover_response, _cover_run_id, cover_usage = self._call_openai_json(
+            instructions=(
+                "Compose a tailored cover letter using the provided snippets and inserts. Return JSON with"
+                " 'cover_letter' (string) and 'talking_points' (list of strings)."
+            ),
+            payload=cover_payload,
+            temperature=max(0.2, float(parameters.get("temperature", 0.35))),
+            max_output_tokens=600,
+        )
+
+        cover_letter = str(cover_response.get("cover_letter", "")).strip()
+        talking_points = [str(point) for point in (cover_response.get("talking_points") or [])]
+
+        return cover_letter, talking_points, cover_usage, cover_response
+
 
     @classmethod
     def normalize_parameters(cls, parameters: Dict[str, object]) -> Dict[str, object]:
@@ -332,6 +1053,31 @@ class AgentKitTailoringService:
         )
         merged["include_summary"] = bool(merged.get("include_summary", True))
         merged["include_cover_letter"] = bool(merged.get("include_cover_letter", False))
+
+        try:
+            stretch_raw = int(merged.get("stretch_level", cls.DEFAULT_PARAMETERS["stretch_level"]))
+        except (TypeError, ValueError):
+            stretch_raw = cls.DEFAULT_PARAMETERS["stretch_level"]
+        merged["stretch_level"] = max(0, min(3, stretch_raw))
+
+        layout = merged.get("section_layout")
+        if isinstance(layout, str):
+            raw_layout = re.split(r"[\n,]+", layout)
+            layout = [item.strip() for item in raw_layout if item.strip()]
+        elif isinstance(layout, Iterable):
+            layout = [str(item).strip() for item in layout if str(item).strip()]
+        else:
+            layout = list(cls.DEFAULT_PARAMETERS["section_layout"])
+        merged["section_layout"] = layout or list(cls.DEFAULT_PARAMETERS["section_layout"])
+
+        inserts = merged.get("cover_letter_inserts") or []
+        if isinstance(inserts, str):
+            inserts = [item.strip() for item in re.split(r"[\n,]+", inserts) if item.strip()]
+        elif isinstance(inserts, Iterable):
+            inserts = [str(item).strip() for item in inserts if str(item).strip()]
+        else:
+            inserts = []
+        merged["cover_letter_inserts"] = inserts
 
         return merged
 
@@ -506,98 +1252,307 @@ class AgentKitTailoringService:
         
         return requirements
 
-    def _match_experiences(
+    def _build_job_profile(
         self,
+        *,
+        job_description: str,
         requirements: Dict[str, List[str]],
+        source_url: str,
+    ) -> JobProfile:
+        buckets = self._bucketize_requirements(requirements)
+        truncated_description = job_description[:2000]
+        return JobProfile(
+            source_url=source_url,
+            description=truncated_description,
+            requirements=requirements,
+            requirement_buckets=buckets,
+        )
+
+    def _bucketize_requirements(self, requirements: Dict[str, List[str]]) -> Dict[str, List[str]]:
+        buckets = {
+            "Professional Experience": [],
+            "Leadership": [],
+            "Projects": [],
+            "Skills & Tools": [],
+        }
+
+        leadership_keywords = {"lead", "managed", "coach", "mentor", "director", "executive", "team"}
+        project_keywords = {"project", "launch", "build", "deploy", "prototype", "implementation", "initiative"}
+
+        combined_lines = requirements.get("responsibilities", []) + requirements.get("qualifications", [])
+        for line in combined_lines:
+            lowered = line.lower()
+            if any(word in lowered for word in leadership_keywords):
+                buckets["Leadership"].append(line)
+            elif any(word in lowered for word in project_keywords):
+                buckets["Projects"].append(line)
+            else:
+                buckets["Professional Experience"].append(line)
+
+        skill_lines = requirements.get("required_skills", []) + requirements.get("preferred_skills", [])
+        skill_lines = skill_lines or requirements.get("skills", [])
+        if skill_lines:
+            buckets["Skills & Tools"].extend(sorted(set(skill_lines)))
+
+        return {key: sorted(set(values)) for key, values in buckets.items() if values}
+
+    def _collect_experience_snippets(
+        self,
+        *,
         experience_graph: dict,
-        limit: int = 5,
-    ) -> List[dict]:
-        """
-        Score and rank experiences against job requirements.
-        """
-        experiences = experience_graph.get("experiences", [])
-        if not experiences:
-            return []
+        job_profile: JobProfile,
+        limit_per_bucket: int,
+    ) -> Dict[str, List[ExperienceSnippet]]:
+        if not experience_graph:
+            return {}
 
-        required_skills = {skill.lower() for skill in requirements.get("skills", [])}
-        requirement_keywords = {kw.lower() for kw in requirements.get("keywords", [])}
+        raw_entries: List[dict] = []
+        for key in ("experiences", "leadership", "projects", "activities"):
+            raw_entries.extend(experience_graph.get(key, []))
 
-        scored: List[Tuple[int, dict]] = []
+        snippet_candidates: Dict[str, List[Tuple[float, ExperienceSnippet]]] = {}
+        for entry in raw_entries:
+            snippet = self._build_snippet_from_entry(entry)
+            if not snippet:
+                continue
+            score = self._score_snippet(snippet, job_profile)
+            snippet_candidates.setdefault(snippet.bucket, []).append((score, snippet))
 
-        for exp in experiences:
-            score = 0
-            exp_skills = {skill.lower() for skill in exp.get("skills", [])}
-            exp_achievements = exp.get("achievements", [])
+        selected: Dict[str, List[ExperienceSnippet]] = {}
+        for bucket, items in snippet_candidates.items():
+            sorted_items = sorted(items, key=lambda pair: pair[0], reverse=True)
+            top_items = [snippet for _score, snippet in sorted_items[:limit_per_bucket]]
+            if top_items:
+                selected[bucket] = top_items
 
-            skill_overlap = len(required_skills & exp_skills)
-            score += skill_overlap * 10
+        return selected
 
-            for achievement in exp_achievements:
-                lower_achievement = achievement.lower()
-                for keyword in requirement_keywords:
-                    if keyword and keyword in lower_achievement:
-                        score += 4
-                        break
+    def _build_snippet_from_entry(self, entry: dict) -> Optional[ExperienceSnippet]:
+        if not entry:
+            return None
 
-            if exp.get("current"):
-                score += 3
+        raw_id = entry.get("id") or entry.get("uuid")
+        snippet_id = str(raw_id or f"snippet-{abs(hash(str(entry))) % 10_000_000}")
+        bucket = self._infer_bucket_from_entry(entry)
 
-            if exp.get("type") == "work":
-                score += 2
+        title = entry.get("title") or entry.get("role") or entry.get("name") or "Experience"
+        organization = entry.get("company") or entry.get("organization") or ""
+        timeframe = self._format_timeframe(entry)
+        achievements = [str(item).strip() for item in entry.get("achievements", []) if str(item).strip()]
+        achievements = achievements[:6]
 
-            scored.append((score, exp))
+        description = entry.get("description", "")
+        summary_seed = description or " ".join(achievements[:2])
+        summary = self._summarize_text(summary_seed, word_limit=45)
 
-        scored.sort(key=lambda item: item[0], reverse=True)
-        top_experiences = [self._trim_experience(experience) for score, experience in scored[:limit]]
-        return top_experiences
+        skills = [str(skill).strip() for skill in entry.get("skills", []) if str(skill).strip()]
 
-    def _trim_experience(self, experience: dict) -> dict:
-        """
-        Reduce experience dictionary to essential keys for prompts.
-        """
-        keys = [
-            "type",
-            "title",
-            "organization",
-            "company",
-            "location",
-            "start",
-            "start_date",
-            "end",
-            "end_date",
-            "current",
-            "skills",
-            "achievements",
-            "description",
-        ]
-        return {key: experience.get(key) for key in keys if key in experience}
+        return ExperienceSnippet(
+            snippet_id=snippet_id,
+            bucket=bucket,
+            title=title,
+            organization=organization,
+            time_frame=timeframe,
+            summary=summary,
+            achievements=achievements,
+            skills=skills,
+            source_ref=entry,
+        )
 
-    def _format_experiences(self, experiences: Sequence[dict]) -> str:
-        """
-        Format experiences for inclusion in the prompt.
-        """
-        formatted_lines: List[str] = []
-        for exp in experiences:
-            title = exp.get("title") or exp.get("organization") or "Untitled Experience"
-            organization = exp.get("company") or exp.get("organization", "")
-            date_range = f"{exp.get('start') or exp.get('start_date', '')} - {exp.get('end') or exp.get('end_date', 'Present')}"
-            formatted_lines.append(f"Title: {title}")
-            if organization:
-                formatted_lines.append(f"Organization: {organization}")
-            formatted_lines.append(f"Dates: {date_range}")
-            skills = ", ".join(exp.get("skills", []))
-            if skills:
-                formatted_lines.append(f"Skills: {skills}")
-            achievements = exp.get("achievements", [])
-            if achievements:
-                formatted_lines.append("Achievements:")
-                for achievement in achievements:
-                    formatted_lines.append(f"  - {achievement}")
-            description = exp.get("description")
-            if description:
-                formatted_lines.append(f"Description: {description}")
-            formatted_lines.append("")  # Blank line between entries
-        return "\n".join(formatted_lines).strip()
+    def _infer_bucket_from_entry(self, entry: dict) -> str:
+        entry_type = str(entry.get("bucket") or entry.get("type") or "").lower()
+        if "lead" in entry_type or entry.get("is_leadership"):
+            return "Leadership"
+        if "project" in entry_type:
+            return "Projects"
+        if "skill" in entry_type:
+            return "Skills & Tools"
+
+        title = str(entry.get("title") or "").lower()
+        if any(keyword in title for keyword in ("president", "chair", "captain", "lead")):
+            return "Leadership"
+        if any(keyword in title for keyword in ("project", "capstone", "hackathon")):
+            return "Projects"
+
+        return "Professional Experience"
+
+    def _format_timeframe(self, entry: dict) -> str:
+        start = entry.get("start") or entry.get("start_date") or ""
+        end = entry.get("end") or entry.get("end_date") or ("Present" if entry.get("current") else "")
+        start = str(start).strip()
+        end = str(end).strip()
+        if start and end:
+            return f"{start} - {end}"
+        if start:
+            return f"{start} - Present"
+        return entry.get("time_frame") or ""
+
+    def _summarize_text(self, text: str, *, word_limit: int) -> str:
+        tokens = re.findall(r"\w+", text)
+        if len(tokens) <= word_limit:
+            return text.strip()
+        truncated = " ".join(tokens[:word_limit])
+        return f"{truncated}..."
+
+    def _score_snippet(self, snippet: ExperienceSnippet, job_profile: JobProfile) -> float:
+        job_keywords = set(keyword.lower() for keyword in job_profile.requirements.get("keywords", []))
+        required_skills = set(skill.lower() for skill in job_profile.requirements.get("required_skills", []))
+        preferred_skills = set(skill.lower() for skill in job_profile.requirements.get("preferred_skills", []))
+
+        snippet_skills = {skill.lower() for skill in snippet.skills}
+        achievement_text = " ".join(snippet.achievements).lower()
+
+        score = 0.0
+        score += 6 * len(snippet_skills & required_skills)
+        score += 3 * len(snippet_skills & preferred_skills)
+        score += 1.5 * len(snippet_skills & job_keywords)
+
+        score += sum(1 for kw in job_keywords if kw and kw in achievement_text)
+
+        if snippet.bucket == "Leadership":
+            score += 2
+        if snippet.bucket == "Projects":
+            score += 1
+        if snippet.source_ref.get("current"):
+            score += 1.5
+
+        return score
+
+    def _plan_sections(
+        self,
+        selected_snippets: Dict[str, List[ExperienceSnippet]],
+        layout: Sequence[str],
+    ) -> List[Dict[str, object]]:
+        plan: List[Dict[str, object]] = []
+        seen_ids: set[str] = set()
+
+        for section_name in layout:
+            snippets = selected_snippets.get(section_name)
+            if not snippets:
+                continue
+            snippet_ids = []
+            for snippet in snippets:
+                if snippet.snippet_id in seen_ids:
+                    continue
+                seen_ids.add(snippet.snippet_id)
+                snippet_ids.append(snippet.snippet_id)
+            if snippet_ids:
+                plan.append({
+                    "name": section_name,
+                    "snippet_ids": snippet_ids,
+                })
+
+        # Fallback: include any remaining snippets not covered by layout
+        remaining = []
+        for bucket, snippets in selected_snippets.items():
+            missing_ids = [s.snippet_id for s in snippets if s.snippet_id not in seen_ids]
+            if missing_ids:
+                remaining.append({"name": bucket, "snippet_ids": missing_ids})
+
+        return plan + remaining
+
+    def _snippets_prompt_payload(
+        self,
+        selected_snippets: Dict[str, List[ExperienceSnippet]],
+    ) -> Dict[str, List[Dict[str, object]]]:
+        return {
+            bucket: [snippet.to_prompt_dict() for snippet in snippets]
+            for bucket, snippets in selected_snippets.items()
+        }
+
+    def _snippets_by_id(
+        self,
+        selected_snippets: Dict[str, List[ExperienceSnippet]],
+    ) -> Dict[str, ExperienceSnippet]:
+        mapping: Dict[str, ExperienceSnippet] = {}
+        for snippets in selected_snippets.values():
+            for snippet in snippets:
+                mapping[snippet.snippet_id] = snippet
+        return mapping
+
+    def _parse_resume_sections(
+        self,
+        payload: Dict[str, Any],
+        *,
+        default_stretch: int,
+    ) -> Tuple[List[Dict[str, List[str]]], List[str], List[Dict[str, object]]]:
+        raw_sections = payload.get("sections") or []
+        if not isinstance(raw_sections, list):
+            raw_sections = []
+
+        structured_sections: List[Dict[str, List[str]]] = []
+        flat_bullets: List[str] = []
+        bullet_details: List[Dict[str, object]] = []
+
+        for section_index, raw_section in enumerate(raw_sections):
+            if not isinstance(raw_section, dict):
+                continue
+            section_name = str(raw_section.get("name", "Highlights"))
+            raw_bullets = raw_section.get("bullets") or []
+            section_texts: List[str] = []
+
+            for bullet_index, bullet_entry in enumerate(raw_bullets):
+                if isinstance(bullet_entry, dict):
+                    text = str(bullet_entry.get("text", "")).strip()
+                    snippet_id = str(bullet_entry.get("snippet_id", ""))
+                    stretch_value = int(bullet_entry.get("stretch", default_stretch))
+                    bullet_id = str(bullet_entry.get("id") or f"b{section_index+1}-{bullet_index+1}")
+                    metrics = bullet_entry.get("metrics")
+                else:
+                    text = str(bullet_entry).strip()
+                    snippet_id = ""
+                    stretch_value = default_stretch
+                    bullet_id = f"b{section_index+1}-{bullet_index+1}"
+                    metrics = None
+
+                if not text:
+                    continue
+
+                section_texts.append(text)
+                flat_bullets.append(text)
+
+                detail = {
+                    "id": bullet_id,
+                    "snippet_id": snippet_id,
+                    "text": text,
+                    "stretch": stretch_value,
+                    "section": section_name,
+                    "section_index": section_index,
+                    "bullet_index": bullet_index,
+                }
+                if metrics:
+                    detail["metrics"] = metrics
+
+                bullet_details.append(detail)
+
+            structured_sections.append({"name": section_name, "bullets": section_texts})
+
+        return structured_sections, flat_bullets, bullet_details
+
+    def _compose_sections_from_details(
+        self,
+        bullet_details: List[Dict[str, object]],
+    ) -> Tuple[List[Dict[str, List[str]]], List[str]]:
+        ordered = sorted(
+            bullet_details,
+            key=lambda item: (item.get("section_index", 0), item.get("bullet_index", 0)),
+        )
+
+        sections_map: Dict[Tuple[int, str], List[str]] = {}
+        for detail in ordered:
+            key = (detail.get("section_index", 0), detail.get("section", "Highlights"))
+            sections_map.setdefault(key, []).append(detail.get("text", ""))
+
+        structured_sections: List[Dict[str, List[str]]] = []
+        flat_bullets: List[str] = []
+
+        for (_, name), bullets in sections_map.items():
+            cleaned = [text for text in bullets if text]
+            if cleaned:
+                structured_sections.append({"name": name, "bullets": cleaned})
+                flat_bullets.extend(cleaned)
+
+        return structured_sections, flat_bullets
 
     def _flatten_sections(self, sections: Sequence[Dict[str, List[str]]]) -> List[str]:
         bullets: List[str] = []
@@ -605,271 +1560,299 @@ class AgentKitTailoringService:
             bullets.extend(section.get("bullets", []))
         return bullets
 
-    def _build_prompt(
+    def _call_openai_json(
         self,
         *,
-        job_description: str,
-        requirements: Dict[str, List[str]],
-        experiences: Sequence[dict],
-        parameters: Dict[str, object],
-        source_url: str,
-    ) -> str:
-        """
-        Compose the instruction prompt for the OpenAI Responses API.
-        """
-        requirements_json = json.dumps(requirements, indent=2)
-        experiences_text = self._format_experiences(experiences) or "No structured experience provided."
-
-        parameter_text = json.dumps(
-            {
-                "sections": parameters["sections"],
-                "bullets_per_section": parameters["bullets_per_section"],
-                "tone": parameters["tone"],
-                "include_summary": parameters["include_summary"],
-                "include_cover_letter": parameters["include_cover_letter"],
-            },
-            indent=2,
-        )
-
-        # Extract ATS-critical information for emphasis
-        required_skills = requirements.get("required_skills", [])
-        preferred_skills = requirements.get("preferred_skills", [])
-        certifications = requirements.get("certifications", [])
-        action_verbs = requirements.get("action_verbs", [])
-        years_exp = requirements.get("years_experience", [])
-        
-        ats_emphasis = ""
-        if required_skills:
-            ats_emphasis += f"\n🎯 REQUIRED SKILLS (Must include): {', '.join(required_skills[:15])}"
-        if certifications:
-            ats_emphasis += f"\n📜 CERTIFICATIONS MENTIONED: {', '.join(certifications)}"
-        if years_exp:
-            ats_emphasis += f"\n⏱️ EXPERIENCE REQUIRED: {', '.join(years_exp)}"
-        if preferred_skills:
-            ats_emphasis += f"\n⭐ PREFERRED SKILLS (Bonus): {', '.join(preferred_skills[:10])}"
-        if action_verbs:
-            ats_emphasis += f"\n💪 KEY ACTION VERBS: {', '.join(action_verbs[:10])}"
-
-        # Add web search instruction if URL provided
-        web_search_note = ""
-        if source_url:
-            web_search_note = f"""
-NOTE: You have web search enabled. Use it to fetch the complete job description from {source_url} 
-and extract ALL requirements, qualifications, and details not present in the text below.
-"""
-
-        # Add custom section instructions if provided
-        custom_instructions = ""
-        section_instructions = parameters.get("section_instructions", "").strip()
-        if section_instructions:
-            custom_instructions = f"""
-
-CUSTOM SECTION INSTRUCTIONS FROM USER:
-{section_instructions}
-
-NOTE: These instructions should GUIDE your content generation while maintaining all ATS optimization rules above. 
-Balance user preferences with ATS requirements - never sacrifice keyword density or metrics for style preferences.
-"""
-
-        prompt = f"""
-You are an expert ATS-optimized resume strategist. Your goal is to maximize both ATS compatibility (passing automated filters) and recruiter appeal (human interest).
-
-JOB SOURCE URL: {source_url or "N/A"}
-{web_search_note}
-
-JOB DESCRIPTION:
-{job_description}
-
-DERIVED REQUIREMENTS (JSON):
-{requirements_json}
-
-{ats_emphasis}
-
-CANDIDATE EXPERIENCE GRAPH:
-{experiences_text}
-
-TAILORING PARAMETERS (JSON):
-{parameter_text}
-
-CRITICAL ATS OPTIMIZATION RULES:
-1. 🎯 KEYWORD DENSITY: Naturally incorporate ALL required skills from the job description
-2. 💪 ACTION VERBS: Start EVERY bullet with a strong action verb (Led, Developed, Achieved, etc.)
-3. 📊 QUANTIFY EVERYTHING: Include specific metrics (%, $, numbers) in at least 80% of bullets
-4. 🎓 MIRROR JOB LANGUAGE: Use exact terminology from the job description when possible
-5. 📏 LENGTH: Keep bullets 100-180 characters for optimal ATS parsing (no truncation)
-6. 🏆 IMPACT FORMULA: Action Verb + Specific Task + Quantifiable Result + Business Impact
-
-RECRUITER APPEAL RULES:
-1. 🎤 STORYTELLING: Show career progression and increasing responsibility
-2. 🎯 RELEVANCE: Prioritize experiences that directly match job requirements
-3. 💎 UNIQUENESS: Highlight distinctive achievements that differentiate the candidate
-4. 🔗 CONNECTIONS: Draw explicit links between past work and job requirements
-5. 📈 GROWTH: Emphasize learning, leadership, and scalable impact
-
-BULLET POINT FORMULA (USE THIS):
-[Action Verb] + [Specific Activity] + [with X tool/skill] + [achieving Y% improvement] + [resulting in $Z impact/benefit]
-
-Example: "Developed automated ETL pipeline using Python and Airflow, reducing data processing time by 65% and saving $120K annually in infrastructure costs"
-{custom_instructions}
-
-INSTRUCTIONS:
-- Write in the candidate's authentic voice while optimizing for ATS
-- Match tone: {parameters["tone"]}
-- MANDATORY: Include required skills naturally throughout bullets
-- MANDATORY: Start every bullet with a strong action verb
-- MANDATORY: Add metrics to 80%+ of bullets
-- Use industry-specific terminology from the job description
-- Respect requested sections: {parameters["sections"]}
-- Target {parameters["bullets_per_section"]} bullets per section
-- If include_summary is true, write a compelling 2-sentence summary emphasizing ATS keywords and unique value
-- If include_cover_letter is true, write a 150-200 word cover letter in 3 paragraphs (intro/body/closing) that naturally incorporates required skills
-- Generate 5-10 actionable suggestions (5-10 words each) focusing on:
-  * Missing required skills that should be added
-  * Metrics that could strengthen bullets
-  * Keywords to emphasize
-  * Certifications to highlight
-  * Formatting improvements
-
-OUTPUT FORMAT (JSON):
-{{
-  "title": str (ATS-optimized job title),
-  "summary": str (optional, keyword-rich 2 sentences),
-  "sections": [{{"name": str, "bullets": [str, ...]}}],
-  "bullets": [str, ...] (flat list if sections not needed),
-  "cover_letter": str (optional, 3 paragraphs with \\n\\n separators),
-  "suggestions": [str, ...] (concise, actionable, 5-10 words each)
-}}
-
-Return ONLY valid JSON, no markdown formatting.
-"""
-        return prompt.strip()
-
-    def _generate_tailored_content(
-        self,
-        *,
-        prompt: str,
-        parameters: Dict[str, object],
-        source_url: str = "",
-    ) -> TailoringResult:
-        """
-        Execute the OpenAI Responses API call and parse the structured response.
-        Uses OpenAI's web search (grounding) when a job URL is provided.
-        """
-        # Build the API request with grounding if URL provided
-        request_params = {
+        instructions: str,
+        payload: Dict[str, Any],
+        temperature: float,
+        max_output_tokens: int,
+        grounding: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[Dict[str, Any], str, Dict[str, int]]:
+        request_params: Dict[str, Any] = {
             "model": self.model,
-            "instructions": (
-                "You are an expert resume strategist. Produce valid JSON only, "
-                "matching the schema described in the user's request."
-            ),
+            "instructions": instructions,
             "input": [
                 {
                     "role": "user",
                     "content": [
                         {
                             "type": "input_text",
-                            "text": prompt,
+                            "text": f"Return response in JSON format:\n\n{json.dumps(payload, ensure_ascii=True, indent=2)}",
                         }
                     ],
-                },
+                }
             ],
-            "temperature": parameters["temperature"],
-            "max_output_tokens": parameters["max_output_tokens"],
+            "temperature": temperature,
+            "max_output_tokens": max_output_tokens,
         }
-        
-        # Enable web search grounding if URL provided
-        if source_url:
-            request_params["grounding"] = {
-                "type": "web_search",
-                "web_search": {
-                    "queries": [f"job posting {source_url}"],
+
+        # OpenAI doesn't allow web_search with JSON mode
+        # When grounding is needed, use text mode and parse JSON manually
+        if grounding:
+            request_params["tools"] = [{"type": "web_search"}]
+            # Skip JSON mode - model will return JSON in text format
+        else:
+            # Use strict JSON mode when web_search isn't needed
+            request_params["text"] = {
+                "format": {
+                    "type": "json_object"
                 }
             }
-        
+
         try:
             response = self.client.responses.create(**request_params)
         except Exception as exc:  # noqa: BLE001
             raise TailoringPipelineError(f"OpenAI request failed: {exc}") from exc
 
+        payload_dict = self._extract_response_json(response)
+        usage = self._extract_usage(response)
+        run_id = getattr(response, "id", "")
+        return payload_dict, run_id, usage
+
+    def _extract_response_json(self, response: Any) -> Dict[str, Any]:
         output_text_parts: List[str] = []
-        for item in response.output:
-            # item is a ResponseOutputMessage (Pydantic object)
-            content_blocks = getattr(item, "content", [])
-            for block in content_blocks:
-                # block is a ResponseOutputText (Pydantic object)
+        for item in getattr(response, "output", []) or []:
+            for block in getattr(item, "content", []) or []:
                 if getattr(block, "type", None) == "output_text":
                     output_text_parts.append(getattr(block, "text", ""))
 
         raw_payload = "".join(output_text_parts).strip()
-        
-        # Remove markdown code fences if present
+
+        # Clean various text prefixes that might appear before JSON
+        # Common patterns: "Based on...", "Here is...", etc.
+        if not raw_payload.startswith("{"):
+            # Try to find where JSON actually starts
+            json_start = raw_payload.find("{")
+            if json_start > 0:
+                # Check if there's explanatory text before the JSON
+                prefix = raw_payload[:json_start].strip()
+                if len(prefix) > 0 and len(prefix) < 200:  # Likely explanatory text
+                    logger.warning(f"Stripping non-JSON prefix: {prefix[:100]}...")
+                    raw_payload = raw_payload[json_start:]
+
+        # Clean markdown code fences if present
         if raw_payload.startswith("```json"):
-            raw_payload = raw_payload[7:]  # Remove ```json
-        if raw_payload.startswith("```"):
-            raw_payload = raw_payload[3:]  # Remove ```
+            raw_payload = raw_payload[7:]
+        elif raw_payload.startswith("```"):
+            raw_payload = raw_payload[3:]
         if raw_payload.endswith("```"):
-            raw_payload = raw_payload[:-3]  # Remove trailing ```
+            raw_payload = raw_payload[:-3]
         raw_payload = raw_payload.strip()
-        
+
+        # SDK convenience property fallback
+        if not raw_payload and hasattr(response, "output_text"):
+            raw_payload = (getattr(response, "output_text", "") or "").strip()
+
         if not raw_payload:
             raise TailoringPipelineError("Received empty response from OpenAI.")
 
-        if not raw_payload and hasattr(response, "output_text"):
-            raw_payload = (response.output_text or "").strip()
-
         try:
-            payload = json.loads(raw_payload)
-        except json.JSONDecodeError:
+            return json.loads(raw_payload)
+        except json.JSONDecodeError as e:
+            # Log the actual error and payload for debugging
+            logger.error(
+                f"JSON decode error at line {e.lineno} col {e.colno}: {e.msg}. "
+                f"Payload preview: {raw_payload[:500]}..."
+            )
+            
+            # Try aggressive extraction: find first { and last }
             start = raw_payload.find("{")
             end = raw_payload.rfind("}")
-            if start != -1 and end != -1:
-                payload = json.loads(raw_payload[start : end + 1])
-            else:
+            
+            if start == -1 or end == -1:
                 raise TailoringPipelineError(
-                    "Failed to parse OpenAI JSON payload."
-                ) from None
+                    f"Failed to parse OpenAI JSON payload. Error: {e.msg} at line {e.lineno}"
+                ) from e
+            
+            # Extract potential JSON
+            potential_json = raw_payload[start : end + 1]
+            
+            try:
+                return json.loads(potential_json)
+            except json.JSONDecodeError as e2:
+                # Last resort: Try to find JSON between markdown sections
+                # Pattern: look for JSON after "**" markers or other markdown
+                lines = raw_payload.split('\n')
+                json_lines = []
+                in_json = False
+                brace_count = 0
+                
+                for line in lines:
+                    stripped = line.strip()
+                    if not in_json and stripped.startswith('{'):
+                        in_json = True
+                        brace_count = stripped.count('{') - stripped.count('}')
+                        json_lines.append(line)
+                    elif in_json:
+                        json_lines.append(line)
+                        brace_count += stripped.count('{') - stripped.count('}')
+                        if brace_count == 0:
+                            break
+                
+                if json_lines:
+                    try:
+                        potential_json = '\n'.join(json_lines)
+                        return json.loads(potential_json)
+                    except json.JSONDecodeError:
+                        pass
+                
+                raise TailoringPipelineError(
+                    f"Failed to parse extracted JSON. Original error: {e.msg}, "
+                    f"Extraction error: {e2.msg}. The model returned narrative text instead of JSON. "
+                    f"Check logs for full payload."
+                ) from e2
 
-        token_usage = {}
-        if getattr(response, "usage", None):
-            token_usage = {
-                "prompt_tokens": getattr(response.usage, "input_tokens", 0),
-                "completion_tokens": getattr(response.usage, "output_tokens", 0),
-                "total_tokens": getattr(response.usage, "total_tokens", 0),
-            }
+    def _extract_usage(self, response: Any) -> Dict[str, int]:
+        usage = getattr(response, "usage", None)
+        if not usage:
+            return {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+        prompt = getattr(usage, "input_tokens", 0)
+        completion = getattr(usage, "output_tokens", 0)
+        total = getattr(usage, "total_tokens", 0) or (prompt + completion)
+        return {
+            "prompt_tokens": int(prompt or 0),
+            "completion_tokens": int(completion or 0),
+            "total_tokens": int(total or 0),
+        }
 
-        sections = payload.get("sections") or []
-        if not isinstance(sections, list):
-            sections = []
+    def _merge_usage(self, accumulator: Dict[str, int], usage: Dict[str, int]) -> None:
+        for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
+            accumulator[key] = accumulator.get(key, 0) + int(usage.get(key, 0) or 0)
 
-        bullets = payload.get("bullets")
-        if bullets is None or not isinstance(bullets, list):
-            bullets = []
-
-        suggestions = payload.get("suggestions")
-        if suggestions is None or not isinstance(suggestions, list):
-            suggestions = []
-
-        result = TailoringResult(
-            title=str(payload.get("title", "")),
-            summary=str(payload.get("summary", "")) if payload.get("summary") else "",
-            sections=[
-                {
-                    "name": str(section.get("name", "Highlights")),
-                    "bullets": [str(bullet) for bullet in section.get("bullets", [])],
-                }
-                for section in sections
-            ],
-            bullets=[str(bullet) for bullet in bullets],
-            suggestions=[str(suggestion) for suggestion in suggestions],
-            cover_letter=str(payload.get("cover_letter", "")) if payload.get("cover_letter") else "",
-            token_usage=token_usage,
-            run_id=getattr(response, "id", ""),
-            debug={"raw_payload": payload},
+    def _fetch_job_description_from_url(self, url: str) -> str:
+        """
+        Use OpenAI web search to fetch and extract job description from a URL.
+        
+        Args:
+            url: Job posting URL to fetch
+            
+        Returns:
+            Extracted job description text
+        """
+        extraction_payload = {
+            "url": url,
+            "instructions": [
+                "Extract the complete job description including:",
+                "- Job title and location",
+                "- Job summary/overview",
+                "- Key responsibilities and duties",
+                "- Required qualifications and skills",
+                "- Preferred qualifications and skills",
+                "- Education requirements",
+                "- Years of experience required",
+                "- Any certifications or licenses needed",
+                "- Company information (if available)",
+            ]
+        }
+        
+        instructions = (
+            "You are a job posting extraction specialist. Use web search to fetch the job posting "
+            "from the provided URL and extract ALL relevant information about the role.\n\n"
+            "CRITICAL OUTPUT FORMAT REQUIREMENTS:\n"
+            "- You MUST return ONLY a valid JSON object\n"
+            "- DO NOT include any explanatory text before or after the JSON\n"
+            "- START YOUR RESPONSE WITH THE { CHARACTER\n"
+            "- END YOUR RESPONSE WITH THE } CHARACTER\n"
+            "- If the website is blocked by CAPTCHA or unavailable, return:\n"
+            '  {"error": "Website blocked or unavailable", "full_description": "", "job_title": "", "location": "", "company": ""}\n\n'
+            "Required JSON structure:\n"
+            "{\n"
+            '  "job_title": "string - exact job title from posting",\n'
+            '  "location": "string - job location",\n'
+            '  "company": "string - company name",\n'
+            '  "full_description": "string - Complete job description with all sections, responsibilities, and requirements",\n'
+            '  "responsibilities": ["array of responsibility bullet points"],\n'
+            '  "required_qualifications": ["array of required qualifications"],\n'
+            '  "preferred_qualifications": ["array of preferred qualifications"],\n'
+            '  "education": "string - education requirements",\n'
+            '  "experience_years": "string - years of experience required"\n'
+            "}"
         )
-        return result
-
-
-
+        
+        grounding = {
+            "type": "web_search",
+            "web_search": {
+                "queries": [f"job posting {url}"]
+            },
+        }
+        
+        try:
+            response_payload, _run_id, _usage = self._call_openai_json(
+                instructions=instructions,
+                payload=extraction_payload,
+                temperature=0.0,
+                max_output_tokens=2000,
+                grounding=grounding,
+            )
+            
+            # Check for error responses (CAPTCHA, blocked sites, etc.)
+            if response_payload.get("error"):
+                logger.warning(f"Web search encountered error: {response_payload.get('error')}")
+                return ""
+            
+            # Check if we got meaningful content
+            full_desc = response_payload.get("full_description", "")
+            if not full_desc or len(full_desc) < 100:
+                # Try to construct from parts if full_description is missing
+                parts = []
+                if response_payload.get("responsibilities"):
+                    parts.extend(response_payload["responsibilities"])
+                if response_payload.get("required_qualifications"):
+                    parts.extend(response_payload["required_qualifications"])
+                
+                if parts:
+                    full_desc = "\n".join(parts)
+            
+            if not full_desc or len(full_desc) < 50:
+                logger.warning(f"Web search returned minimal/no content for {url}")
+                return ""
+            
+            # Construct full description from extracted parts
+            full_desc_parts = []
+            
+            if response_payload.get("job_title"):
+                full_desc_parts.append(f"Job Title: {response_payload['job_title']}")
+            if response_payload.get("location"):
+                full_desc_parts.append(f"Location: {response_payload['location']}")
+            if response_payload.get("company"):
+                full_desc_parts.append(f"Company: {response_payload['company']}")
+            
+            if response_payload.get("full_description"):
+                full_desc_parts.append(response_payload["full_description"])
+            
+            if response_payload.get("responsibilities"):
+                full_desc_parts.append("\nResponsibilities:")
+                for resp in response_payload["responsibilities"]:
+                    full_desc_parts.append(f"- {resp}")
+            
+            if response_payload.get("required_qualifications"):
+                full_desc_parts.append("\nRequired Qualifications:")
+                for qual in response_payload["required_qualifications"]:
+                    full_desc_parts.append(f"- {qual}")
+            
+            if response_payload.get("preferred_qualifications"):
+                full_desc_parts.append("\nPreferred Qualifications:")
+                for qual in response_payload["preferred_qualifications"]:
+                    full_desc_parts.append(f"- {qual}")
+            
+            if response_payload.get("education"):
+                full_desc_parts.append(f"\nEducation: {response_payload['education']}")
+            if response_payload.get("experience_years"):
+                full_desc_parts.append(f"Experience: {response_payload['experience_years']}")
+            
+            full_description = "\n".join(full_desc_parts)
+            
+            if not full_description or len(full_description) < 100:
+                logger.warning(f"Web search returned minimal content for {url}: {len(full_description)} chars")
+                return ""
+            
+            logger.info(f"Successfully extracted {len(full_description)} chars from {url}")
+            return full_description
+            
+        except Exception as e:
+            logger.error(f"Failed to fetch job description from {url}: {e}")
+            return ""
 
 class ResumeOptimizer:
     """
@@ -910,8 +1893,12 @@ class ResumeOptimizer:
         
         # Calculate keyword match
         keyword_matches = 0
+        matched_keywords = []
         if job_keywords:
-            keyword_matches = sum(1 for kw in job_keywords if kw.lower() in resume_text)
+            for kw in job_keywords:
+                if kw.lower() in resume_text:
+                    keyword_matches += 1
+                    matched_keywords.append(kw)
             keyword_match_pct = (keyword_matches / len(job_keywords)) * 100
         else:
             keyword_match_pct = 0.0
@@ -919,26 +1906,45 @@ class ResumeOptimizer:
         # Calculate required skills match (weighted heavily)
         required_matches = 0
         missing_required = []
+        matched_required = []
         if required_skills:
             for skill in required_skills:
+                # Skip single-letter or overly generic terms that provide no value
+                if len(skill) <= 2 or skill.lower() in ['a', 'an', 'the', 'aid', 'it', 'is']:
+                    continue
                 if skill.lower() in resume_text:
                     required_matches += 1
+                    matched_required.append(skill)
                 else:
                     missing_required.append(skill)
-            required_match_pct = (required_matches / len(required_skills)) * 100
+            # Recalculate with filtered skills
+            total_valid_required = required_matches + len(missing_required)
+            if total_valid_required > 0:
+                required_match_pct = (required_matches / total_valid_required) * 100
+            else:
+                required_match_pct = 100.0
         else:
             required_match_pct = 100.0  # No requirements = perfect score
         
         # Calculate preferred skills match (bonus points)
         preferred_matches = 0
         missing_preferred = []
+        matched_preferred = []
         if preferred_skills:
             for skill in preferred_skills:
+                # Skip trivial terms
+                if len(skill) <= 2 or skill.lower() in ['a', 'an', 'the', 'aid', 'it', 'is']:
+                    continue
                 if skill.lower() in resume_text:
                     preferred_matches += 1
+                    matched_preferred.append(skill)
                 else:
                     missing_preferred.append(skill)
-            preferred_match_pct = (preferred_matches / len(preferred_skills)) * 100
+            total_valid_preferred = preferred_matches + len(missing_preferred)
+            if total_valid_preferred > 0:
+                preferred_match_pct = (preferred_matches / total_valid_preferred) * 100
+            else:
+                preferred_match_pct = 0.0
         else:
             preferred_match_pct = 0.0
         
@@ -950,35 +1956,60 @@ class ResumeOptimizer:
             (preferred_match_pct * 0.10)
         )
         
-        # Generate suggestions
+        # Generate specific, actionable suggestions
         suggestions = []
-        if missing_required:
-            suggestions.append(
-                f"CRITICAL: Add these required skills: {', '.join(missing_required[:5])}"
-            )
-        if required_match_pct < 80:
-            suggestions.append(
-                "Include more required skills throughout your bullets"
-            )
-        if keyword_match_pct < 60:
-            suggestions.append(
-                "Incorporate more job-specific keywords naturally"
-            )
-        if missing_preferred and preferred_match_pct < 50:
-            suggestions.append(
-                f"Consider adding preferred skills: {', '.join(missing_preferred[:3])}"
-            )
+        
+        # Focus on critical missing skills first
+        if missing_required and len(missing_required) > 0:
+            top_missing = missing_required[:3]
+            if len(top_missing) == 1:
+                suggestions.append(
+                    f"Add required skill: {top_missing[0]} - Include specific examples of how you've used this in your experience"
+                )
+            else:
+                suggestions.append(
+                    f"Add required skills: {', '.join(top_missing)} - Weave these into your achievement descriptions with concrete examples"
+                )
+        
+        # Provide context-aware keyword suggestions
+        if keyword_match_pct < 60 and job_keywords:
+            missing_keywords = [kw for kw in job_keywords if kw.lower() not in resume_text][:5]
+            if missing_keywords:
+                suggestions.append(
+                    f"Strengthen keyword coverage by incorporating: {', '.join(missing_keywords)} - Use these terms naturally when describing relevant work"
+                )
+        
+        # Suggest preferred skills if space allows
+        if missing_preferred and preferred_match_pct < 40 and len(missing_preferred) > 0:
+            top_preferred = [s for s in missing_preferred[:3] if len(s) > 2]
+            if top_preferred:
+                suggestions.append(
+                    f"Consider highlighting: {', '.join(top_preferred)} - These preferred skills could differentiate your application"
+                )
+        
+        # Provide overall guidance
         if overall_score >= 85:
             suggestions.append(
-                "Excellent ATS compatibility! Your resume should pass most ATS filters."
+                "Strong ATS compatibility - Your resume aligns well with job requirements"
             )
         elif overall_score >= 70:
             suggestions.append(
-                "Good ATS compatibility. Minor improvements could boost your score."
+                "Good foundation - Focus on incorporating the missing required skills to reach excellent ATS compatibility"
+            )
+        elif overall_score >= 50:
+            suggestions.append(
+                "Moderate ATS match - Priority: add required skills with specific examples from your experience"
             )
         else:
             suggestions.append(
-                "ATS compatibility needs improvement. Focus on required skills first."
+                "Significant gaps in required skills - Review job posting carefully and align your resume with key requirements"
+            )
+        
+        # Add metric-focused suggestion if few numbers detected
+        numbers_count = len(re.findall(r'\d+', resume_text))
+        if numbers_count < len(bullet_points) * 0.5:  # Less than 50% of bullets have metrics
+            suggestions.append(
+                "Add quantifiable metrics to your achievements (e.g., percentages, dollar amounts, time savings, user scale)"
             )
         
         return {
@@ -988,6 +2019,8 @@ class ResumeOptimizer:
             "preferred_skills_match": round(preferred_match_pct, 1),
             "missing_critical": missing_required[:10],  # Limit to top 10
             "missing_preferred": missing_preferred[:10],
+            "matched_required": matched_required,
+            "matched_preferred": matched_preferred,
             "suggestions": suggestions,
         }
 
