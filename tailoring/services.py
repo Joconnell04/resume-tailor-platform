@@ -183,7 +183,7 @@ class AgentKitTailoringService:
         "include_summary": True,
         "include_cover_letter": False,
         "temperature": 0.35,
-        "max_output_tokens": 900,
+        "max_output_tokens": 2000,  # Increased to accommodate detailed output with job_requirements
         "stretch_level": 2,
         "section_layout": [
             "Professional Experience",
@@ -364,13 +364,16 @@ class AgentKitTailoringService:
             parameters=normalized_parameters,
         )
 
+        # Use updated requirements from job_profile (may have been enhanced by web search)
+        final_requirements = job_profile.requirements
+
         all_bullets = result.bullets or self._flatten_sections(result.sections)
         optimizer = ResumeOptimizer()
         ats_score = optimizer.calculate_ats_score(
             bullet_points=all_bullets,
-            job_keywords=requirements.get("keywords", []),
-            required_skills=requirements.get("required_skills", []),
-            preferred_skills=requirements.get("preferred_skills", []),
+            job_keywords=final_requirements.get("keywords", []),
+            required_skills=final_requirements.get("required_skills", []),
+            preferred_skills=final_requirements.get("preferred_skills", []),
         )
 
         bullet_validations = []
@@ -436,7 +439,7 @@ class AgentKitTailoringService:
         guardrail_dict = [finding for finding in result.guardrail_report]
 
         debug_payload = {
-            "requirements": requirements,
+            "requirements": final_requirements,
             "job_profile": job_profile.to_prompt_dict(),
             "selected_snippets": {
                 bucket: [snippet.to_prompt_dict() for snippet in snippets]
@@ -613,6 +616,12 @@ class AgentKitTailoringService:
                 "OUTPUT FORMAT (CRITICAL - READ CAREFULLY):\n"
                 "- If job_posting_url is provided, use web search to get complete job posting details\n"
                 "- Extract job location with approximate latitude/longitude if possible\n"
+                "- CRITICALLY IMPORTANT: Extract and include the job requirements in the job_requirements field:\n"
+                "  * description: Full job description text\n"
+                "  * required_skills: List of must-have technical and soft skills\n"
+                "  * preferred_skills: List of nice-to-have skills\n"
+                "  * responsibilities: Key duties and responsibilities\n"
+                "  * qualifications: Required qualifications (education, experience, etc.)\n"
                 "- YOU MUST RETURN ONLY A SINGLE VALID JSON OBJECT - NO NARRATIVE TEXT, NO MARKDOWN, NO EXPLANATIONS\n"
                 "- DO NOT write any introductory text like 'Based on...', 'Here is...', etc.\n"
                 "- DO NOT wrap the JSON in markdown code blocks (no ```json or ``` markers)\n"
@@ -635,7 +644,7 @@ class AgentKitTailoringService:
             instructions=instructions,
             payload=generation_payload,
             temperature=float(parameters.get("temperature", 0.35)),
-            max_output_tokens=int(parameters.get("max_output_tokens", 900)),
+            max_output_tokens=int(parameters.get("max_output_tokens", 2000)),
             grounding=grounding,
         )
 
@@ -835,7 +844,7 @@ class AgentKitTailoringService:
             ),
             payload=guard_payload,
             temperature=0.0,
-            max_output_tokens=500,
+            max_output_tokens=1200,  # Increased for larger bullet lists with detailed analysis
         )
 
         findings_raw = guard_response.get("findings") or []
@@ -1569,7 +1578,7 @@ class AgentKitTailoringService:
                     "content": [
                         {
                             "type": "input_text",
-                            "text": json.dumps(payload, ensure_ascii=True, indent=2),
+                            "text": f"Return response in JSON format:\n\n{json.dumps(payload, ensure_ascii=True, indent=2)}",
                         }
                     ],
                 }
