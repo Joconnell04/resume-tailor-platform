@@ -119,6 +119,17 @@ def tailoring_create(request):
 
         sections_input = (request.POST.get('sections') or '').strip()
         sections = [line.strip() for line in sections_input.splitlines() if line.strip()]
+        
+        # Get section order if provided
+        sections_order = (request.POST.get('sections_order') or '').strip()
+        if sections_order:
+            ordered_sections = [s.strip() for s in sections_order.split(',') if s.strip()]
+            # Use ordered sections if provided, otherwise use default order
+            if ordered_sections:
+                sections = ordered_sections
+        
+        # Get custom instructions
+        section_instructions = (request.POST.get('section_instructions') or '').strip()
 
         tone_key = request.POST.get('tone_preset', 'confident')
         tone_value = tone_presets.get(tone_key, tone_presets['confident'])['value']
@@ -133,6 +144,7 @@ def tailoring_create(request):
             'max_output_tokens': request.POST.get('max_output_tokens', '').strip(),
             'include_summary': request.POST.get('include_summary') == 'on',
             'include_cover_letter': request.POST.get('include_cover_letter') == 'on',
+            'section_instructions': section_instructions,
         }
 
         parameters = AgentKitTailoringService.normalize_parameters(parameters_raw)

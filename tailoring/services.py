@@ -658,6 +658,19 @@ NOTE: You have web search enabled. Use it to fetch the complete job description 
 and extract ALL requirements, qualifications, and details not present in the text below.
 """
 
+        # Add custom section instructions if provided
+        custom_instructions = ""
+        section_instructions = parameters.get("section_instructions", "").strip()
+        if section_instructions:
+            custom_instructions = f"""
+
+CUSTOM SECTION INSTRUCTIONS FROM USER:
+{section_instructions}
+
+NOTE: These instructions should GUIDE your content generation while maintaining all ATS optimization rules above. 
+Balance user preferences with ATS requirements - never sacrifice keyword density or metrics for style preferences.
+"""
+
         prompt = f"""
 You are an expert ATS-optimized resume strategist. Your goal is to maximize both ATS compatibility (passing automated filters) and recruiter appeal (human interest).
 
@@ -697,6 +710,7 @@ BULLET POINT FORMULA (USE THIS):
 [Action Verb] + [Specific Activity] + [with X tool/skill] + [achieving Y% improvement] + [resulting in $Z impact/benefit]
 
 Example: "Developed automated ETL pipeline using Python and Airflow, reducing data processing time by 65% and saving $120K annually in infrastructure costs"
+{custom_instructions}
 
 INSTRUCTIONS:
 - Write in the candidate's authentic voice while optimizing for ATS

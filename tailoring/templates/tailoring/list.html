@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load tailoring_filters %}
 
 {% block title %}Tailoring Sessions - MyApply{% endblock %}
 
@@ -42,7 +43,7 @@
                     </td>
                     <td>
                         {% if session.token_usage.total_tokens %}
-                        {{ session.token_usage.total_tokens }}
+                        {{ session.token_usage.total_tokens|format_number }}
                         {% else %}
                         —
                         {% endif %}

@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load tailoring_filters %}
 
 {% block title %}New Tailoring Session - MyApply{% endblock %}
 
@@ -8,11 +9,11 @@
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.75rem 1.25rem;
+    padding: 1rem 1.5rem;
     background: linear-gradient(135deg, rgba(74, 144, 226, 0.15), rgba(139, 92, 246, 0.15));
     border: 2px solid rgba(74, 144, 226, 0.4);
-    border-radius: 8px;
-    font-size: 0.95rem;
+    border-radius: 10px;
+    font-size: 1.05rem;
     font-weight: 500;
     box-shadow: 0 2px 8px rgba(74, 144, 226, 0.2);
 }
@@ -20,6 +21,44 @@
 .token-balance-value {
     color: var(--accent-light);
     font-weight: 700;
+    font-size: 1.25rem;
+}
+
+/* Form Controls Styling */
+.form-select,
+.form-input {
+    padding: 1rem 1.25rem;
+    font-size: 1.05rem;
+    border-radius: 8px;
+    border: 2px solid rgba(74, 144, 226, 0.3);
+    background: rgba(26, 35, 50, 0.4);
+    color: var(--text-primary);
+    transition: all 0.2s ease;
+    width: 100%;
+}
+
+.form-select:hover,
+.form-input:hover {
+    border-color: rgba(74, 144, 226, 0.5);
+}
+
+.form-select:focus,
+.form-input:focus {
+    outline: none;
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+}
+
+.btn {
+    padding: 0.875rem 1.75rem;
+    font-size: 1.05rem;
+    border-radius: 8px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.btn-primary {
+    padding: 1rem 2rem;
     font-size: 1.1rem;
 }
 
@@ -34,10 +73,10 @@
     align-items: center;
     gap: 0.75rem;
     cursor: pointer;
-    padding: 1rem 1.25rem;
+    padding: 1.25rem 1.5rem;
     background: linear-gradient(135deg, rgba(26, 35, 50, 0.6), rgba(26, 35, 50, 0.4));
     border: 2px solid rgba(74, 144, 226, 0.3);
-    border-radius: 8px;
+    border-radius: 10px;
     transition: all 0.3s ease;
     -webkit-user-select: none;
     user-select: none;
@@ -87,18 +126,18 @@
 }
 
 .slider-container {
-    margin-top: 0.75rem;
-    padding: 0.75rem;
+    margin-top: 1rem;
+    padding: 1.25rem;
     background: rgba(26, 35, 50, 0.3);
-    border-radius: 8px;
+    border-radius: 10px;
     border: 1px solid rgba(74, 144, 226, 0.2);
 }
 
 .slider-visual {
     position: relative;
-    height: 10px;
+    height: 12px;
     background: rgba(26, 35, 50, 0.6);
-    border-radius: 6px;
+    border-radius: 8px;
     overflow: hidden;
     border: 1px solid rgba(74, 144, 226, 0.2);
 }
@@ -106,7 +145,7 @@
 .slider-fill {
     height: 100%;
     background: linear-gradient(90deg, #4A90E2, #8B5CF6, #10B981);
-    border-radius: 6px;
+    border-radius: 8px;
     transition: width 0.2s ease;
     box-shadow: 0 0 10px rgba(74, 144, 226, 0.4);
 }
@@ -114,68 +153,70 @@
 .slider-labels {
     display: flex;
     justify-content: space-between;
-    margin-top: 0.5rem;
-    font-size: 0.8rem;
+    margin-top: 0.75rem;
+    font-size: 0.95rem;
     color: var(--text-secondary);
     font-weight: 500;
 }
 
 .slider-value {
     display: inline-block;
-    min-width: 3.5rem;
+    min-width: 4rem;
     text-align: center;
-    padding: 0.35rem 0.75rem;
+    padding: 0.5rem 1rem;
     background: linear-gradient(135deg, var(--accent-blue), var(--accent-light));
     color: white;
-    border-radius: 6px;
-    font-size: 0.9rem;
+    border-radius: 8px;
+    font-size: 1.1rem;
     font-weight: 700;
-    margin-left: 0.75rem;
-    box-shadow: 0 2px 6px rgba(74, 144, 226, 0.3);
+    margin-left: 1rem;
+    box-shadow: 0 2px 8px rgba(74, 144, 226, 0.3);
 }
 
 input[type="range"] {
     -webkit-appearance: none;
     appearance: none;
     width: 100%;
-    height: 8px;
+    height: 12px;
     background: transparent;
     outline: none;
-    margin: 0.5rem 0;
+    margin: 0.75rem 0;
 }
 
 input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
-    width: 20px;
-    height: 20px;
+    width: 28px;
+    height: 28px;
     background: var(--accent-light);
     cursor: pointer;
     border-radius: 50%;
-    border: 3px solid var(--bg-secondary);
-    box-shadow: 0 2px 6px rgba(74, 144, 226, 0.4);
+    border: 4px solid var(--bg-secondary);
+    box-shadow: 0 3px 10px rgba(74, 144, 226, 0.5);
     transition: all 0.2s ease;
 }
 
 input[type="range"]::-webkit-slider-thumb:hover {
     background: var(--accent-blue);
-    transform: scale(1.1);
+    transform: scale(1.15);
+    box-shadow: 0 4px 14px rgba(74, 144, 226, 0.7);
 }
 
 input[type="range"]::-moz-range-thumb {
-    width: 20px;
-    height: 20px;
+    width: 28px;
+    height: 28px;
     background: var(--accent-light);
     cursor: pointer;
     border-radius: 50%;
-    border: 3px solid var(--bg-secondary);
-    box-shadow: 0 2px 6px rgba(74, 144, 226, 0.4);
+    border: 4px solid var(--bg-secondary);
+    box-shadow: 0 3px 10px rgba(74, 144, 226, 0.5);
     transition: all 0.2s ease;
 }
 
 input[type="range"]::-moz-range-thumb:hover {
     background: var(--accent-blue);
-    transform: scale(1.1);
+    transform: scale(1.15);
+    box-shadow: 0 4px 14px rgba(74, 144, 226, 0.7);
 }
 
 .form-help {
@@ -227,7 +268,7 @@ input[type="range"]::-moz-range-thumb:hover {
 }
 
 .form-group {
-    margin-bottom: 1.75rem;
+    margin-bottom: 2rem;
 }
 
 .form-label {
@@ -235,8 +276,43 @@ input[type="range"]::-moz-range-thumb:hover {
     align-items: center;
     gap: 0.5rem;
     font-weight: 600;
-    margin-bottom: 0.75rem;
+    margin-bottom: 1rem;
     color: var(--text-primary);
+    font-size: 1.1rem;
+}
+
+.checkbox-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.875rem;
+}
+
+.form-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+    padding: 0.875rem 1.125rem;
+    background: rgba(26, 35, 50, 0.3);
+    border: 1px solid rgba(74, 144, 226, 0.2);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.form-checkbox:hover {
+    background: rgba(74, 144, 226, 0.1);
+    border-color: rgba(74, 144, 226, 0.4);
+}
+
+.form-checkbox input[type="checkbox"] {
+    width: 22px;
+    height: 22px;
+    cursor: pointer;
+    accent-color: var(--accent-blue);
+}
+
+.form-checkbox span {
+    font-size: 1.05rem;
 }
 
 .advanced-toggle-label {
@@ -269,24 +345,24 @@ input[type="range"]::-moz-range-thumb:hover {
 
 /* Sections Selector */
 .sections-selector {
-    padding: 1.25rem;
+    padding: 1.5rem;
     background: linear-gradient(135deg, rgba(26, 35, 50, 0.5), rgba(26, 35, 50, 0.3));
     border: 2px solid rgba(74, 144, 226, 0.3);
-    border-radius: 8px;
+    border-radius: 12px;
 }
 
 .sections-categories {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 1.25rem;
-    margin-bottom: 1.25rem;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
 }
 
 .section-category {
     background: rgba(26, 35, 50, 0.4);
     border: 1px solid rgba(74, 144, 226, 0.2);
-    border-radius: 6px;
-    padding: 1rem;
+    border-radius: 8px;
+    padding: 1.25rem;
     transition: all 0.3s ease;
 }
 
@@ -296,40 +372,42 @@ input[type="range"]::-moz-range-thumb:hover {
 }
 
 .category-header {
-    font-size: 0.95rem;
+    font-size: 1.05rem;
     font-weight: 600;
     color: var(--accent-light);
-    margin-bottom: 0.75rem;
-    padding-bottom: 0.5rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
     border-bottom: 2px solid rgba(74, 144, 226, 0.3);
 }
 
 .category-items {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 0.75rem;
 }
 
 .section-item {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    padding: 0.5rem 0.75rem;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
     background: rgba(26, 35, 50, 0.3);
-    border-radius: 4px;
+    border-radius: 6px;
     cursor: pointer;
     transition: all 0.2s ease;
-    font-size: 0.9rem;
+    font-size: 1rem;
+    border: 1px solid transparent;
 }
 
 .section-item:hover {
     background: rgba(74, 144, 226, 0.15);
+    border-color: rgba(74, 144, 226, 0.3);
     transform: translateX(4px);
 }
 
 .section-item input[type="checkbox"] {
-    width: 18px;
-    height: 18px;
+    width: 22px;
+    height: 22px;
     cursor: pointer;
     accent-color: var(--accent-blue);
 }
@@ -339,18 +417,145 @@ input[type="range"]::-moz-range-thumb:hover {
     font-weight: 600;
 }
 
+/* Selected Sections (Drag and Drop) */
+.selected-sections-container {
+    margin: 1.5rem 0;
+    padding: 1.25rem;
+    background: rgba(74, 144, 226, 0.05);
+    border: 2px dashed rgba(74, 144, 226, 0.3);
+    border-radius: 8px;
+    min-height: 100px;
+}
+
+.selected-sections-header {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--accent-light);
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.selected-sections-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    min-height: 50px;
+}
+
+.selected-section-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    background: linear-gradient(135deg, rgba(74, 144, 226, 0.15), rgba(139, 92, 246, 0.1));
+    border: 1px solid rgba(74, 144, 226, 0.4);
+    border-radius: 8px;
+    cursor: move;
+    transition: all 0.2s ease;
+    font-size: 1.05rem;
+    font-weight: 500;
+}
+
+.selected-section-item:hover {
+    background: linear-gradient(135deg, rgba(74, 144, 226, 0.25), rgba(139, 92, 246, 0.15));
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(74, 144, 226, 0.3);
+}
+
+.selected-section-item.dragging {
+    opacity: 0.5;
+    transform: scale(0.98);
+}
+
+.selected-section-item.drag-over {
+    border-top: 3px solid var(--accent-blue);
+    margin-top: 0.5rem;
+}
+
+.drag-handle {
+    color: var(--accent-light);
+    font-size: 1.25rem;
+    cursor: grab;
+}
+
+.drag-handle:active {
+    cursor: grabbing;
+}
+
+.section-order-number {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: var(--accent-blue);
+    color: white;
+    border-radius: 50%;
+    font-weight: 700;
+    font-size: 0.95rem;
+}
+
+.remove-section-btn {
+    margin-left: auto;
+    padding: 0.5rem 0.75rem;
+    background: rgba(239, 68, 68, 0.2);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    color: #ef4444;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-weight: 600;
+}
+
+.remove-section-btn:hover {
+    background: rgba(239, 68, 68, 0.3);
+    transform: scale(1.05);
+}
+
 .custom-section-input {
     display: flex;
-    gap: 0.75rem;
-    padding-top: 1rem;
+    gap: 1rem;
+    padding-top: 1.25rem;
     border-top: 2px solid rgba(74, 144, 226, 0.2);
 }
 
 .custom-section-input input {
     flex: 1;
+    padding: 0.875rem 1.25rem;
+    font-size: 1rem;
+}
+
+.custom-instructions {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 2px solid rgba(74, 144, 226, 0.2);
+}
+
+.custom-instructions textarea {
+    width: 100%;
+    min-height: 120px;
+    padding: 1rem 1.25rem;
+    background: rgba(26, 35, 50, 0.4);
+    border: 1px solid rgba(74, 144, 226, 0.3);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 1rem;
+    line-height: 1.6;
+    resize: vertical;
+    font-family: inherit;
+}
+
+.custom-instructions textarea:focus {
+    outline: none;
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
 }
 
 .btn-secondary {
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
     background: linear-gradient(135deg, rgba(74, 144, 226, 0.3), rgba(139, 92, 246, 0.3));
     border: 1px solid rgba(74, 144, 226, 0.5);
 }
@@ -367,7 +572,7 @@ input[type="range"]::-moz-range-thumb:hover {
         <h1 class="page-title">Create Tailoring Session</h1>
         <div class="token-balance">
             <span>💎 Tokens Available:</span>
-            <span class="token-balance-value">{{ user.tokens_available|default:0 }}</span>
+            <span class="token-balance-value">{{ user.tokens_available|default:0|format_number }}</span>
         </div>
     </div>
 
@@ -473,11 +678,32 @@ input[type="range"]::-moz-range-thumb:hover {
                             <button type="button" id="add-custom-section" class="btn btn-small btn-secondary">Add</button>
                         </div>
                         
+                        <div class="selected-sections-container">
+                            <div class="selected-sections-header">
+                                <span>📋 Selected Sections (Drag to Reorder)</span>
+                            </div>
+                            <div class="selected-sections-list" id="selected-sections-list">
+                                <!-- Dynamically populated -->
+                            </div>
+                        </div>
+                        
+                        <div class="custom-instructions">
+                            <label class="form-label" for="section_instructions">
+                                💬 Custom Instructions (Optional)
+                            </label>
+                            <textarea name="section_instructions" id="section_instructions" placeholder="Add any specific instructions for the AI about your resume sections. For example: 'Focus on leadership experiences in Professional Highlights' or 'Emphasize Python and cloud technologies in Technical Expertise'. This guides the AI without overriding ATS optimization logic."></textarea>
+                            <div class="form-help mt-1">
+                                <span class="form-help-icon">🎯</span>
+                                <span class="form-help-text">These instructions guide the AI's content generation while maintaining ATS optimization. Be specific about what you want emphasized in each section.</span>
+                            </div>
+                        </div>
+                        
                         <input type="hidden" name="sections" id="sections" value="">
+                        <input type="hidden" name="sections_order" id="sections_order" value="">
                     </div>
                     <div class="form-help">
                         <span class="form-help-icon">📝</span>
-                        <span class="form-help-text">Select pre-defined sections or add your own custom section names. Each section will contain targeted bullet points tailored to the job.</span>
+                        <span class="form-help-text">Select pre-defined sections or add your own custom section names. Drag and drop to arrange the order they'll appear in your resume.</span>
                     </div>
                 </div>
 
@@ -589,6 +815,20 @@ input[type="range"]::-moz-range-thumb:hover {
 {% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+    // Format number with commas
+    function formatNumber(num) {
+        return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    }
+    
+    // Format all numbers on page load
+    const tokenBalance = document.querySelector('.token-balance-value');
+    if (tokenBalance) {
+        const value = parseInt(tokenBalance.textContent.replace(/,/g, ''));
+        if (!isNaN(value)) {
+            tokenBalance.textContent = formatNumber(value);
+        }
+    }
+    
     // Tone preset toggle
     const tonePreset = document.getElementById('tone_preset');
     const toneCustom = document.getElementById('tone_custom');
@@ -628,12 +868,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const includeCoverLetter = coverLetterCheckbox?.checked || false;
 
         // Estimate based on typical usage patterns
-        // Base: ~300-400 tokens for prompt
-        // Output scales with bullets and max_tokens
         let estimatedMin = 400 + (bullets * 30);
         let estimatedMax = 600 + (bullets * 50);
         
-        // Factor in max_tokens (output is usually 60-80% of max)
         const outputEstimate = Math.floor(maxTokens * 0.7);
         estimatedMax = Math.max(estimatedMax, 600 + outputEstimate);
         
@@ -647,16 +884,14 @@ document.addEventListener('DOMContentLoaded', () => {
             estimatedMax += 250;
         }
 
-        costDisplay.textContent = `~${estimatedMin}-${estimatedMax} tokens`;
+        costDisplay.textContent = `~${formatNumber(estimatedMin)}-${formatNumber(estimatedMax)} tokens`;
         
         // Add warning if high
         const parent = costDisplay.closest('.estimated-cost');
         if (estimatedMax > 1500) {
             if (!parent.querySelector('.cost-warning')) {
                 const warning = document.createElement('div');
-                warning.className = 'cost-warning text-warning';
-                warning.style.marginTop = '0.5rem';
-                warning.style.fontSize = '0.85rem';
+                warning.className = 'cost-warning text-warning mt-1';
                 warning.textContent = '⚠️ High token usage - consider reducing max output tokens or bullets per section';
                 parent.appendChild(warning);
             }
@@ -677,28 +912,147 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initial calculation
     updateCostEstimate();
     
-    // Sections selector
+    // Sections selector with drag and drop
     const sectionsHiddenInput = document.getElementById('sections');
+    const sectionsOrderInput = document.getElementById('sections_order');
     const sectionCheckboxes = document.querySelectorAll('input[name="section_check"]');
     const customSectionInput = document.getElementById('custom-section');
     const addCustomSectionBtn = document.getElementById('add-custom-section');
+    const selectedSectionsList = document.getElementById('selected-sections-list');
     
-    function updateSectionsHiddenInput() {
+    let draggedElement = null;
+    
+    function updateSelectedSectionsList() {
         const selectedSections = Array.from(sectionCheckboxes)
             .filter(cb => cb.checked)
             .map(cb => cb.value);
+        
+        selectedSectionsList.innerHTML = '';
+        
+        if (selectedSections.length === 0) {
+            selectedSectionsList.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 1rem;">No sections selected. Check boxes above to add sections.</div>';
+            sectionsHiddenInput.value = '';
+            sectionsOrderInput.value = '';
+            return;
+        }
+        
+        selectedSections.forEach((section, index) => {
+            const item = document.createElement('div');
+            item.className = 'selected-section-item';
+            item.draggable = true;
+            item.dataset.section = section;
+            item.innerHTML = `
+                <span class="drag-handle">⋮⋮</span>
+                <span class="section-order-number">${index + 1}</span>
+                <span style="flex: 1;">${section}</span>
+                <button type="button" class="remove-section-btn" data-section="${section}">✕ Remove</button>
+            `;
+            
+            // Drag events
+            item.addEventListener('dragstart', handleDragStart);
+            item.addEventListener('dragover', handleDragOver);
+            item.addEventListener('drop', handleDrop);
+            item.addEventListener('dragend', handleDragEnd);
+            
+            // Remove button
+            item.querySelector('.remove-section-btn').addEventListener('click', () => {
+                const checkbox = Array.from(sectionCheckboxes).find(cb => cb.value === section);
+                if (checkbox) {
+                    checkbox.checked = false;
+                    updateSelectedSectionsList();
+                }
+            });
+            
+            selectedSectionsList.appendChild(item);
+        });
+        
         sectionsHiddenInput.value = selectedSections.join('\n');
+        sectionsOrderInput.value = selectedSections.join(',');
     }
     
-    // Update hidden input on checkbox change
+    function handleDragStart(e) {
+        draggedElement = this;
+        this.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/html', this.innerHTML);
+    }
+    
+    function handleDragOver(e) {
+        if (e.preventDefault) {
+            e.preventDefault();
+        }
+        e.dataTransfer.dropEffect = 'move';
+        
+        const draggedOver = e.currentTarget;
+        if (draggedElement !== draggedOver) {
+            draggedOver.classList.add('drag-over');
+        }
+        return false;
+    }
+    
+    function handleDrop(e) {
+        if (e.stopPropagation) {
+            e.stopPropagation();
+        }
+        
+        const draggedOver = e.currentTarget;
+        if (draggedElement !== draggedOver) {
+            // Swap positions
+            const allItems = Array.from(selectedSectionsList.children);
+            const draggedIndex = allItems.indexOf(draggedElement);
+            const targetIndex = allItems.indexOf(draggedOver);
+            
+            if (draggedIndex < targetIndex) {
+                draggedOver.parentNode.insertBefore(draggedElement, draggedOver.nextSibling);
+            } else {
+                draggedOver.parentNode.insertBefore(draggedElement, draggedOver);
+            }
+            
+            // Update order numbers and hidden inputs
+            updateOrderNumbers();
+        }
+        
+        draggedOver.classList.remove('drag-over');
+        return false;
+    }
+    
+    function handleDragEnd(e) {
+        this.classList.remove('dragging');
+        selectedSectionsList.querySelectorAll('.selected-section-item').forEach(item => {
+            item.classList.remove('drag-over');
+        });
+    }
+    
+    function updateOrderNumbers() {
+        const items = selectedSectionsList.querySelectorAll('.selected-section-item');
+        const orderedSections = [];
+        
+        items.forEach((item, index) => {
+            const numberSpan = item.querySelector('.section-order-number');
+            numberSpan.textContent = index + 1;
+            orderedSections.push(item.dataset.section);
+        });
+        
+        sectionsHiddenInput.value = orderedSections.join('\n');
+        sectionsOrderInput.value = orderedSections.join(',');
+    }
+    
+    // Update selected sections list on checkbox change
     sectionCheckboxes.forEach(cb => {
-        cb.addEventListener('change', updateSectionsHiddenInput);
+        cb.addEventListener('change', updateSelectedSectionsList);
     });
     
     // Add custom section
     addCustomSectionBtn.addEventListener('click', () => {
         const customValue = customSectionInput.value.trim();
         if (!customValue) return;
+        
+        // Check if already exists
+        const exists = Array.from(sectionCheckboxes).some(cb => cb.value === customValue);
+        if (exists) {
+            alert('This section already exists!');
+            return;
+        }
         
         // Find first category to add to (Professional Experience)
         const firstCategory = document.querySelector('.category-items');
@@ -713,11 +1067,14 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Add event listener to new checkbox
             const newCheckbox = newItem.querySelector('input[type="checkbox"]');
-            newCheckbox.addEventListener('change', updateSectionsHiddenInput);
+            newCheckbox.addEventListener('change', updateSelectedSectionsList);
             
-            // Clear input and update hidden field
+            // Clear input and update
             customSectionInput.value = '';
-            updateSectionsHiddenInput();
+            
+            // Re-query checkboxes
+            const allCheckboxes = document.querySelectorAll('input[name="section_check"]');
+            updateSelectedSectionsList();
         }
     });
     
@@ -730,7 +1087,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     // Initialize sections on load
-    updateSectionsHiddenInput();
+    updateSelectedSectionsList();
 });
 </script>
 {% endblock %}

@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load tailoring_filters %}
 
 {% block title %}Tailoring Session - MyApply{% endblock %}
 
@@ -348,9 +349,9 @@
                     <li>
                         <strong>Tokens:</strong>
                         {% if usage.total_tokens %}
-                            {{ usage.total_tokens }} total
-                            ({{ usage.prompt_tokens|default:0 }} prompt /
-                            {{ usage.completion_tokens|default:0 }} completion)
+                            {{ usage.total_tokens|format_number }} total
+                            ({{ usage.prompt_tokens|default:0|format_number }} prompt /
+                            {{ usage.completion_tokens|default:0|format_number }} completion)
                         {% else %}
                             —
                         {% endif %}
