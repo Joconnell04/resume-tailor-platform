@@ -2,16 +2,376 @@
 
 {% block title %}New Tailoring Session - MyApply{% endblock %}
 
+{% block extra_css %}
+<style>
+.token-balance {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.25rem;
+    background: linear-gradient(135deg, rgba(74, 144, 226, 0.15), rgba(139, 92, 246, 0.15));
+    border: 2px solid rgba(74, 144, 226, 0.4);
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    box-shadow: 0 2px 8px rgba(74, 144, 226, 0.2);
+}
+
+.token-balance-value {
+    color: var(--accent-light);
+    font-weight: 700;
+    font-size: 1.1rem;
+}
+
+.advanced-settings {
+    margin-top: 2rem;
+    border-top: 2px solid rgba(74, 144, 226, 0.2);
+    padding-top: 1.5rem;
+}
+
+.advanced-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    cursor: pointer;
+    padding: 1rem 1.25rem;
+    background: linear-gradient(135deg, rgba(26, 35, 50, 0.6), rgba(26, 35, 50, 0.4));
+    border: 2px solid rgba(74, 144, 226, 0.3);
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    -webkit-user-select: none;
+    user-select: none;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.advanced-toggle:hover {
+    border-color: var(--accent-blue);
+    background: linear-gradient(135deg, rgba(74, 144, 226, 0.15), rgba(139, 92, 246, 0.1));
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(74, 144, 226, 0.2);
+}
+
+.advanced-toggle-icon {
+    transition: transform 0.3s ease;
+    color: var(--accent-blue);
+    font-weight: bold;
+}
+
+.advanced-toggle.active .advanced-toggle-icon {
+    transform: rotate(90deg);
+}
+
+.advanced-content {
+    display: none;
+    margin-top: 1rem;
+    padding: 1rem;
+    background: rgba(26, 35, 50, 0.3);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+}
+
+.advanced-content.active {
+    display: block;
+    animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.slider-container {
+    margin-top: 0.75rem;
+    padding: 0.75rem;
+    background: rgba(26, 35, 50, 0.3);
+    border-radius: 8px;
+    border: 1px solid rgba(74, 144, 226, 0.2);
+}
+
+.slider-visual {
+    position: relative;
+    height: 10px;
+    background: rgba(26, 35, 50, 0.6);
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid rgba(74, 144, 226, 0.2);
+}
+
+.slider-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #4A90E2, #8B5CF6, #10B981);
+    border-radius: 6px;
+    transition: width 0.2s ease;
+    box-shadow: 0 0 10px rgba(74, 144, 226, 0.4);
+}
+
+.slider-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.slider-value {
+    display: inline-block;
+    min-width: 3.5rem;
+    text-align: center;
+    padding: 0.35rem 0.75rem;
+    background: linear-gradient(135deg, var(--accent-blue), var(--accent-light));
+    color: white;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    margin-left: 0.75rem;
+    box-shadow: 0 2px 6px rgba(74, 144, 226, 0.3);
+}
+
+input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 8px;
+    background: transparent;
+    outline: none;
+    margin: 0.5rem 0;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    background: var(--accent-light);
+    cursor: pointer;
+    border-radius: 50%;
+    border: 3px solid var(--bg-secondary);
+    box-shadow: 0 2px 6px rgba(74, 144, 226, 0.4);
+    transition: all 0.2s ease;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+    background: var(--accent-blue);
+    transform: scale(1.1);
+}
+
+input[type="range"]::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    background: var(--accent-light);
+    cursor: pointer;
+    border-radius: 50%;
+    border: 3px solid var(--bg-secondary);
+    box-shadow: 0 2px 6px rgba(74, 144, 226, 0.4);
+    transition: all 0.2s ease;
+}
+
+input[type="range"]::-moz-range-thumb:hover {
+    background: var(--accent-blue);
+    transform: scale(1.1);
+}
+
+.form-help {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: linear-gradient(135deg, rgba(74, 144, 226, 0.08), rgba(139, 92, 246, 0.05));
+    border-left: 4px solid var(--accent-blue);
+    border-radius: 6px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+}
+
+.form-help-icon {
+    color: var(--accent-blue);
+    font-weight: bold;
+    flex-shrink: 0;
+    font-size: 1.1rem;
+}
+
+.form-help-text {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+}
+
+.estimated-cost {
+    margin-top: 1.5rem;
+    padding: 1.25rem;
+    background: linear-gradient(135deg, rgba(74, 144, 226, 0.12), rgba(139, 92, 246, 0.08));
+    border: 2px solid rgba(74, 144, 226, 0.3);
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(74, 144, 226, 0.15);
+}
+
+.estimated-cost-label {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+}
+
+.estimated-cost-value {
+    font-size: 1.4rem;
+    color: var(--accent-light);
+    font-weight: 700;
+    text-shadow: 0 0 10px rgba(74, 144, 226, 0.3);
+}
+
+.form-group {
+    margin-bottom: 1.75rem;
+}
+
+.form-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+    color: var(--text-primary);
+}
+
+.advanced-toggle-label {
+    flex: 1;
+    font-weight: 500;
+}
+
+.advanced-toggle-subtitle {
+    font-size: 0.85rem;
+}
+
+.tone-custom-input {
+    display: none;
+}
+
+.card {
+    animation: fadeIn 0.4s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Sections Selector */
+.sections-selector {
+    padding: 1.25rem;
+    background: linear-gradient(135deg, rgba(26, 35, 50, 0.5), rgba(26, 35, 50, 0.3));
+    border: 2px solid rgba(74, 144, 226, 0.3);
+    border-radius: 8px;
+}
+
+.sections-categories {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.25rem;
+    margin-bottom: 1.25rem;
+}
+
+.section-category {
+    background: rgba(26, 35, 50, 0.4);
+    border: 1px solid rgba(74, 144, 226, 0.2);
+    border-radius: 6px;
+    padding: 1rem;
+    transition: all 0.3s ease;
+}
+
+.section-category:hover {
+    border-color: rgba(74, 144, 226, 0.5);
+    background: rgba(74, 144, 226, 0.08);
+}
+
+.category-header {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--accent-light);
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid rgba(74, 144, 226, 0.3);
+}
+
+.category-items {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.section-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    background: rgba(26, 35, 50, 0.3);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 0.9rem;
+}
+
+.section-item:hover {
+    background: rgba(74, 144, 226, 0.15);
+    transform: translateX(4px);
+}
+
+.section-item input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: var(--accent-blue);
+}
+
+.section-item input[type="checkbox"]:checked + span {
+    color: var(--accent-light);
+    font-weight: 600;
+}
+
+.custom-section-input {
+    display: flex;
+    gap: 0.75rem;
+    padding-top: 1rem;
+    border-top: 2px solid rgba(74, 144, 226, 0.2);
+}
+
+.custom-section-input input {
+    flex: 1;
+}
+
+.btn-secondary {
+    background: linear-gradient(135deg, rgba(74, 144, 226, 0.3), rgba(139, 92, 246, 0.3));
+    border: 1px solid rgba(74, 144, 226, 0.5);
+}
+
+.btn-secondary:hover {
+    background: linear-gradient(135deg, rgba(74, 144, 226, 0.5), rgba(139, 92, 246, 0.5));
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="tailoring-create">
-    <h1 class="card-title mb-2">
-        Create Tailoring Session
-    </h1>
+    <div class="page-header">
+        <h1 class="page-title">Create Tailoring Session</h1>
+        <div class="token-balance">
+            <span>💎 Tokens Available:</span>
+            <span class="token-balance-value">{{ user.tokens_available|default:0 }}</span>
+        </div>
+    </div>
 
     <div class="card">
-        <div class="card-header">
-            <h2 class="card-title">Create Tailoring Session</h2>
-        </div>
         <div class="card-body">
             {% if jobs %}
             <form method="post">
@@ -25,61 +385,190 @@
                         <option value="{{ job.id }}">{{ job.title }} at {{ job.company }}</option>
                         {% endfor %}
                     </select>
-                    <small class="text-muted">Choose the job you want to tailor your resume for.</small>
+                    <div class="form-help">
+                        <span class="form-help-icon">💡</span>
+                        <span class="form-help-text">Select the job posting you want to tailor your resume for. The AI will analyze the requirements and match them to your experience.</span>
+                    </div>
                 </div>
 
-                <div class="alert alert-warning mb-2">
-                    <strong>Note:</strong> Starting a session consumes tokens from your balance ({{ user.tokens_available }} available). 
-                    AI processing runs in the background once created.
+                <div class="form-group">
+                    <label class="form-label" for="sections">📝 Resume Sections</label>
+                    <div class="sections-selector">
+                        <div class="sections-categories">
+                            <div class="section-category">
+                                <div class="category-header">💼 Professional Experience</div>
+                                <div class="category-items">
+                                    <label class="section-item">
+                                        <input type="checkbox" name="section_check" value="Professional Highlights" checked>
+                                        <span>Professional Highlights</span>
+                                    </label>
+                                    <label class="section-item">
+                                        <input type="checkbox" name="section_check" value="Career Achievements">
+                                        <span>Career Achievements</span>
+                                    </label>
+                                    <label class="section-item">
+                                        <input type="checkbox" name="section_check" value="Work Experience">
+                                        <span>Work Experience</span>
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <div class="section-category">
+                                <div class="category-header">🎯 Leadership & Impact</div>
+                                <div class="category-items">
+                                    <label class="section-item">
+                                        <input type="checkbox" name="section_check" value="Leadership Impact">
+                                        <span>Leadership Impact</span>
+                                    </label>
+                                    <label class="section-item">
+                                        <input type="checkbox" name="section_check" value="Strategic Initiatives">
+                                        <span>Strategic Initiatives</span>
+                                    </label>
+                                    <label class="section-item">
+                                        <input type="checkbox" name="section_check" value="Team Leadership">
+                                        <span>Team Leadership</span>
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <div class="section-category">
+                                <div class="category-header">🔧 Technical & Skills</div>
+                                <div class="category-items">
+                                    <label class="section-item">
+                                        <input type="checkbox" name="section_check" value="Technical Expertise">
+                                        <span>Technical Expertise</span>
+                                    </label>
+                                    <label class="section-item">
+                                        <input type="checkbox" name="section_check" value="Core Competencies">
+                                        <span>Core Competencies</span>
+                                    </label>
+                                    <label class="section-item">
+                                        <input type="checkbox" name="section_check" value="Key Skills">
+                                        <span>Key Skills</span>
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <div class="section-category">
+                                <div class="category-header">📚 Education & Certifications</div>
+                                <div class="category-items">
+                                    <label class="section-item">
+                                        <input type="checkbox" name="section_check" value="Education Background">
+                                        <span>Education Background</span>
+                                    </label>
+                                    <label class="section-item">
+                                        <input type="checkbox" name="section_check" value="Certifications">
+                                        <span>Certifications</span>
+                                    </label>
+                                    <label class="section-item">
+                                        <input type="checkbox" name="section_check" value="Professional Development">
+                                        <span>Professional Development</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="custom-section-input">
+                            <input type="text" id="custom-section" class="form-input" placeholder="+ Add custom section name">
+                            <button type="button" id="add-custom-section" class="btn btn-small btn-secondary">Add</button>
+                        </div>
+                        
+                        <input type="hidden" name="sections" id="sections" value="">
+                    </div>
+                    <div class="form-help">
+                        <span class="form-help-icon">📝</span>
+                        <span class="form-help-text">Select pre-defined sections or add your own custom section names. Each section will contain targeted bullet points tailored to the job.</span>
+                    </div>
                 </div>
 
-                <div class="card-subtitle">Tailoring Options</div>
-
-                <div class="form-grid">
-                    <div class="form-group wide">
-                        <label class="form-label" for="sections">Sections (one per line)</label>
-                        <textarea name="sections" id="sections" class="form-textarea" rows="4" placeholder="Professional Highlights&#10;Leadership Impact&#10;Technical Expertise">{{ default_sections_text }}</textarea>
-                        <small class="text-muted">Specify the sections you want in the output. The system keeps at least one section even if left blank.</small>
+                <div class="form-group">
+                    <label class="form-label" for="bullets_per_section">
+                        Bullets Per Section
+                        <span class="slider-value" id="bullets-value">{{ default_parameters.bullets_per_section }}</span>
+                    </label>
+                    <input type="range" name="bullets_per_section" id="bullets_per_section" class="form-input" min="1" max="8" value="{{ default_parameters.bullets_per_section }}" oninput="document.getElementById('bullets-value').textContent = this.value">
+                    <div class="slider-labels">
+                        <span>1 (Concise)</span>
+                        <span>8 (Detailed)</span>
                     </div>
-
-                    <div class="form-group">
-                        <label class="form-label" for="bullets_per_section">Bullets Per Section</label>
-                        <input type="number" name="bullets_per_section" id="bullets_per_section" class="form-input" min="1" max="8" value="{{ default_parameters.bullets_per_section }}">
+                    <div class="form-help">
+                        <span class="form-help-icon">🎯</span>
+                        <span class="form-help-text">Controls how many achievement bullet points are generated per section. More bullets = more detail but uses more tokens.</span>
                     </div>
+                </div>
 
-                    <div class="form-group">
-                        <label class="form-label" for="tone_preset">Tone</label>
-                        <select name="tone_preset" id="tone_preset" class="form-select">
-                            {% for key, preset in tone_presets.items %}
-                            <option value="{{ key }}">{{ preset.label }}</option>
-                            {% endfor %}
-                            <option value="custom">Custom tone</option>
-                        </select>
-                        <input type="text" name="tone_custom" id="tone_custom" class="form-input mt-1" placeholder="Describe your preferred tone" style="display: none;">
-                        <small class="text-muted">Choose a preset or describe the voice you want for the bullets.</small>
+                <div class="form-group">
+                    <label class="form-label" for="tone_preset">Writing Tone</label>
+                    <select name="tone_preset" id="tone_preset" class="form-select">
+                        {% for key, preset in tone_presets.items %}
+                        <option value="{{ key }}">{{ preset.label }}</option>
+                        {% endfor %}
+                        <option value="custom">Custom tone...</option>
+                    </select>
+                    <input type="text" name="tone_custom" id="tone_custom" class="form-input mt-1 tone-custom-input" placeholder="Describe your preferred tone (e.g., 'formal and academic')">
+                    <div class="form-help">
+                        <span class="form-help-icon">✍️</span>
+                        <span class="form-help-text">Choose the writing style for your resume bullets. Confident & metric-driven works well for most tech roles.</span>
                     </div>
+                </div>
 
-                    <div class="form-group">
-                        <label class="form-label" for="temperature">Creativity</label>
-                        <input type="range" name="temperature" id="temperature" min="0" max="1" step="0.05" value="{{ default_parameters.temperature }}">
-                        <small class="text-muted">Lower = precise &amp; safe, higher = more creative phrasing.</small>
+                <div class="form-group checkbox-group">
+                    <label class="form-checkbox">
+                        <input type="checkbox" name="include_summary" {% if default_parameters.include_summary %}checked{% endif %}>
+                        <span>📄 Include professional summary paragraph</span>
+                    </label>
+                    <label class="form-checkbox mt-1">
+                        <input type="checkbox" name="include_cover_letter">
+                        <span>✉️ Generate brief cover letter (adds ~200 tokens)</span>
+                    </label>
+                </div>
+
+                <!-- Advanced Settings -->
+                <div class="advanced-settings">
+                    <div class="advanced-toggle" id="advanced-toggle">
+                        <span class="advanced-toggle-icon">▶</span>
+                        <span class="advanced-toggle-label">Advanced Settings</span>
+                        <span class="text-muted advanced-toggle-subtitle">Fine-tune AI parameters</span>
                     </div>
+                    
+                    <div class="advanced-content" id="advanced-content">
+                        <div class="form-group">
+                            <label class="form-label" for="temperature">
+                                Creativity Level
+                                <span class="slider-value" id="temp-value">{{ default_parameters.temperature }}</span>
+                            </label>
+                            <input type="range" name="temperature" id="temperature" min="0" max="1" step="0.05" value="{{ default_parameters.temperature }}" oninput="document.getElementById('temp-value').textContent = parseFloat(this.value).toFixed(2)">
+                            <div class="slider-labels">
+                                <span>0.0 (Conservative)</span>
+                                <span>1.0 (Creative)</span>
+                            </div>
+                            <div class="form-help">
+                                <span class="form-help-icon">🎨</span>
+                                <span class="form-help-text">Lower values (0.2-0.4) produce consistent, professional language. Higher values (0.6-1.0) generate more varied, creative phrasing. Recommended: 0.35</span>
+                            </div>
+                        </div>
 
-                    <div class="form-group">
-                        <label class="form-label" for="max_output_tokens">Max Output Tokens</label>
-                        <input type="number" name="max_output_tokens" id="max_output_tokens" class="form-input" min="200" max="1500" value="{{ default_parameters.max_output_tokens }}">
-                        <small class="text-muted">Advanced: adjust if you need longer or shorter responses.</small>
-                    </div>
+                        <div class="form-group">
+                            <label class="form-label" for="max_output_tokens">
+                                Max Output Tokens
+                                <span class="slider-value" id="tokens-value">{{ default_parameters.max_output_tokens }}</span>
+                            </label>
+                            <input type="range" name="max_output_tokens" id="max_output_tokens" class="form-input" min="200" max="2000" step="100" value="{{ default_parameters.max_output_tokens }}" oninput="document.getElementById('tokens-value').textContent = this.value">
+                            <div class="slider-labels">
+                                <span>200 (Brief)</span>
+                                <span>2000 (Comprehensive)</span>
+                            </div>
+                            <div class="form-help">
+                                <span class="form-help-icon">⚙️</span>
+                                <span class="form-help-text">Limits the AI's response length. Higher values allow more detailed output but consume more tokens. Typical range: 500-1000 tokens. Each token ≈ 0.75 words.</span>
+                            </div>
+                        </div>
 
-                    <div class="form-group checkbox-group">
-                        <label class="form-checkbox">
-                            <input type="checkbox" name="include_summary" {% if default_parameters.include_summary %}checked{% endif %}>
-                            <span>Include summary paragraph</span>
-                        </label>
-                        <label class="form-checkbox mt-1">
-                            <input type="checkbox" name="include_cover_letter">
-                            <span>Generate a mini cover letter</span>
-                        </label>
+                        <div class="estimated-cost">
+                            <div class="estimated-cost-label">Estimated Token Cost:</div>
+                            <div class="estimated-cost-value" id="estimated-cost">~800-1200 tokens</div>
+                            <small class="text-muted">Actual usage depends on job description length and your experience data.</small>
+                        </div>
                     </div>
                 </div>
 
@@ -100,18 +589,148 @@
 {% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+    // Tone preset toggle
     const tonePreset = document.getElementById('tone_preset');
     const toneCustom = document.getElementById('tone_custom');
-    if (!tonePreset || !toneCustom) {
-        return;
+    if (tonePreset && toneCustom) {
+        const toggleToneField = () => {
+            const isCustom = tonePreset.value === 'custom';
+            toneCustom.style.display = isCustom ? 'block' : 'none';
+            toneCustom.required = isCustom;
+        };
+        tonePreset.addEventListener('change', toggleToneField);
+        toggleToneField();
     }
-    const toggleToneField = () => {
-        const isCustom = tonePreset.value === 'custom';
-        toneCustom.style.display = isCustom ? 'block' : 'none';
-        toneCustom.required = isCustom;
-    };
-    tonePreset.addEventListener('change', toggleToneField);
-    toggleToneField();
+
+    // Advanced settings toggle
+    const advancedToggle = document.getElementById('advanced-toggle');
+    const advancedContent = document.getElementById('advanced-content');
+    if (advancedToggle && advancedContent) {
+        advancedToggle.addEventListener('click', () => {
+            advancedToggle.classList.toggle('active');
+            advancedContent.classList.toggle('active');
+        });
+    }
+
+    // Dynamic cost estimation
+    const bulletsInput = document.getElementById('bullets_per_section');
+    const maxTokensInput = document.getElementById('max_output_tokens');
+    const summaryCheckbox = document.querySelector('input[name="include_summary"]');
+    const coverLetterCheckbox = document.querySelector('input[name="include_cover_letter"]');
+    const costDisplay = document.getElementById('estimated-cost');
+
+    function updateCostEstimate() {
+        if (!costDisplay) return;
+        
+        const bullets = parseInt(bulletsInput?.value || 3);
+        const maxTokens = parseInt(maxTokensInput?.value || 900);
+        const includeSummary = summaryCheckbox?.checked || false;
+        const includeCoverLetter = coverLetterCheckbox?.checked || false;
+
+        // Estimate based on typical usage patterns
+        // Base: ~300-400 tokens for prompt
+        // Output scales with bullets and max_tokens
+        let estimatedMin = 400 + (bullets * 30);
+        let estimatedMax = 600 + (bullets * 50);
+        
+        // Factor in max_tokens (output is usually 60-80% of max)
+        const outputEstimate = Math.floor(maxTokens * 0.7);
+        estimatedMax = Math.max(estimatedMax, 600 + outputEstimate);
+        
+        if (includeSummary) {
+            estimatedMin += 50;
+            estimatedMax += 100;
+        }
+        
+        if (includeCoverLetter) {
+            estimatedMin += 150;
+            estimatedMax += 250;
+        }
+
+        costDisplay.textContent = `~${estimatedMin}-${estimatedMax} tokens`;
+        
+        // Add warning if high
+        const parent = costDisplay.closest('.estimated-cost');
+        if (estimatedMax > 1500) {
+            if (!parent.querySelector('.cost-warning')) {
+                const warning = document.createElement('div');
+                warning.className = 'cost-warning text-warning';
+                warning.style.marginTop = '0.5rem';
+                warning.style.fontSize = '0.85rem';
+                warning.textContent = '⚠️ High token usage - consider reducing max output tokens or bullets per section';
+                parent.appendChild(warning);
+            }
+        } else {
+            const warning = parent.querySelector('.cost-warning');
+            if (warning) warning.remove();
+        }
+    }
+
+    // Update on input changes
+    [bulletsInput, maxTokensInput, summaryCheckbox, coverLetterCheckbox].forEach(el => {
+        if (el) {
+            el.addEventListener('change', updateCostEstimate);
+            el.addEventListener('input', updateCostEstimate);
+        }
+    });
+
+    // Initial calculation
+    updateCostEstimate();
+    
+    // Sections selector
+    const sectionsHiddenInput = document.getElementById('sections');
+    const sectionCheckboxes = document.querySelectorAll('input[name="section_check"]');
+    const customSectionInput = document.getElementById('custom-section');
+    const addCustomSectionBtn = document.getElementById('add-custom-section');
+    
+    function updateSectionsHiddenInput() {
+        const selectedSections = Array.from(sectionCheckboxes)
+            .filter(cb => cb.checked)
+            .map(cb => cb.value);
+        sectionsHiddenInput.value = selectedSections.join('\n');
+    }
+    
+    // Update hidden input on checkbox change
+    sectionCheckboxes.forEach(cb => {
+        cb.addEventListener('change', updateSectionsHiddenInput);
+    });
+    
+    // Add custom section
+    addCustomSectionBtn.addEventListener('click', () => {
+        const customValue = customSectionInput.value.trim();
+        if (!customValue) return;
+        
+        // Find first category to add to (Professional Experience)
+        const firstCategory = document.querySelector('.category-items');
+        if (firstCategory) {
+            const newItem = document.createElement('label');
+            newItem.className = 'section-item';
+            newItem.innerHTML = `
+                <input type="checkbox" name="section_check" value="${customValue}" checked>
+                <span>${customValue}</span>
+            `;
+            firstCategory.appendChild(newItem);
+            
+            // Add event listener to new checkbox
+            const newCheckbox = newItem.querySelector('input[type="checkbox"]');
+            newCheckbox.addEventListener('change', updateSectionsHiddenInput);
+            
+            // Clear input and update hidden field
+            customSectionInput.value = '';
+            updateSectionsHiddenInput();
+        }
+    });
+    
+    // Allow Enter key to add custom section
+    customSectionInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            addCustomSectionBtn.click();
+        }
+    });
+    
+    // Initialize sections on load
+    updateSectionsHiddenInput();
 });
 </script>
 {% endblock %}

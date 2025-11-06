@@ -76,9 +76,10 @@ python manage.py test
 - Celery task scrapes the URL (if provided), merges content, builds a structured OpenAI prompt, and persists the result (sections, bullets, summary, suggestions, optional cover letter).
 - Token usage and word counts are recorded back onto the user for quota tracking.
 - Session detail page shows statuses, run IDs, token stats, generated content, and a collapsible debug log for troubleshooting.
-- If Redis isn’t running when you kick off a session, the view falls back to executing the task synchronously and lets you know with a banner.
+- If the queue is unavailable when you start a run, the session is marked failed instantly with guidance so the UI never stalls.
 - Status badges expect uppercase strings (`PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`), so keep enum values in sync with the model.
 - Sessions that sit in `PENDING` longer than the configured timeout automatically retry or get marked failed with a clear message; `PROCESSING` sessions get the same treatment if they exceed their window.
+- Creating a session returns immediately—the async worker handles the heavy lifting—and you can delete a run from its detail page if something goes wrong.
 
 ### Dashboard + profiles
 - Dashboard pulls recent jobs, tailoring sessions, and token counts.

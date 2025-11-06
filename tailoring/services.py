@@ -159,7 +159,7 @@ class AgentKitTailoringService:
         self.model = os.environ.get("OPENAI_MODEL") or getattr(
             settings,
             "OPENAI_MODEL",
-            "gpt-4.1-mini",
+            "gpt-4o-mini",
         )
         self.client = OpenAI(api_key=self.api_key)
 
@@ -513,16 +513,22 @@ INSTRUCTIONS:
 - Respect the requested sections and bullet counts. If you cannot fill a section, provide your best effort and briefly note the gap in suggestions.
 - Use strong action verbs, quantify impact where possible, and align to the derived requirements.
 - If include_summary is true, provide a brief summary paragraph (2 sentences max) highlighting the candidate's fit.
-- If include_cover_letter is true, include a concise cover letter (<= 180 words) addressing the hiring manager.
-- Provide actionable suggestions (array of strings) for the candidate to further customize their resume.
+- If include_cover_letter is true, include a cover letter (150-200 words) formatted as 3 distinct paragraphs separated by double newlines:
+  * Paragraph 1 (Introduction): Brief greeting and interest in the position
+  * Paragraph 2 (Body): Key qualifications and alignment with role requirements
+  * Paragraph 3 (Closing): Call to action and professional closing
+- Provide actionable suggestions as an array of SHORT, CONCISE bullet-point recommendations (each 5-10 words max). Examples:
+  * "Quantify impact with specific metrics"
+  * "Add certifications relevant to role"
+  * "Emphasize cloud platform experience"
 - Return a JSON object with the following structure:
   {{
     "title": str,
     "summary": str (optional),
     "sections": [{{"name": str, "bullets": [str, ...]}}],
     "bullets": [str, ...] (optional flat list),
-    "cover_letter": str (optional),
-    "suggestions": [str, ...]
+    "cover_letter": str (optional, formatted as 3 paragraphs with \\n\\n separators),
+    "suggestions": [str, ...] (concise bullets, 5-10 words each)
   }}
 - Do not include markdown outside the JSON payload.
 """
@@ -540,22 +546,21 @@ INSTRUCTIONS:
         try:
             response = self.client.responses.create(
                 model=self.model,
+                instructions=(
+                    "You are an expert resume strategist. Produce valid JSON only, "
+                    "matching the schema described in the user's request."
+                ),
                 input=[
                     {
-                        "role": "system",
+                        "role": "user",
                         "content": [
                             {
-                                "type": "text",
-                                "text": "You are an expert resume strategist that produces structured JSON output.",
+                                "type": "input_text",
+                                "text": prompt,
                             }
                         ],
                     },
-                    {
-                        "role": "user",
-                        "content": [{"type": "text", "text": prompt}],
-                    },
                 ],
-                response_format={"type": "json_object"},
                 temperature=parameters["temperature"],
                 max_output_tokens=parameters["max_output_tokens"],
             )
@@ -564,18 +569,41 @@ INSTRUCTIONS:
 
         output_text_parts: List[str] = []
         for item in response.output:
-            for block in item.get("content", []):
-                if block.get("type") in {"output_text", "text"}:
-                    output_text_parts.append(block.get("text", ""))
+            # item is a ResponseOutputMessage (Pydantic object)
+            content_blocks = getattr(item, "content", [])
+            for block in content_blocks:
+                # block is a ResponseOutputText (Pydantic object)
+                if getattr(block, "type", None) == "output_text":
+                    output_text_parts.append(getattr(block, "text", ""))
 
         raw_payload = "".join(output_text_parts).strip()
+        
+        # Remove markdown code fences if present
+        if raw_payload.startswith("```json"):
+            raw_payload = raw_payload[7:]  # Remove ```json
+        if raw_payload.startswith("```"):
+            raw_payload = raw_payload[3:]  # Remove ```
+        if raw_payload.endswith("```"):
+            raw_payload = raw_payload[:-3]  # Remove trailing ```
+        raw_payload = raw_payload.strip()
+        
         if not raw_payload:
             raise TailoringPipelineError("Received empty response from OpenAI.")
 
+        if not raw_payload and hasattr(response, "output_text"):
+            raw_payload = (response.output_text or "").strip()
+
         try:
             payload = json.loads(raw_payload)
-        except json.JSONDecodeError as exc:
-            raise TailoringPipelineError(f"Failed to parse OpenAI JSON payload: {exc}") from exc
+        except json.JSONDecodeError:
+            start = raw_payload.find("{")
+            end = raw_payload.rfind("}")
+            if start != -1 and end != -1:
+                payload = json.loads(raw_payload[start : end + 1])
+            else:
+                raise TailoringPipelineError(
+                    "Failed to parse OpenAI JSON payload."
+                ) from None
 
         token_usage = {}
         if getattr(response, "usage", None):

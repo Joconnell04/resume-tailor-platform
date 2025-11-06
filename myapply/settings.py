@@ -164,7 +164,7 @@ REST_FRAMEWORK = {
 # MAPBOX_TOKEN for Mapbox Isochrone API
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
 MAPBOX_TOKEN = os.environ.get('MAPBOX_TOKEN', '')
-OPENAI_MODEL = os.environ.get('OPENAI_MODEL', 'gpt-4.1-mini')
+OPENAI_MODEL = os.environ.get('OPENAI_MODEL', 'gpt-4o-mini')
 
 # Celery / task queue configuration
 CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')

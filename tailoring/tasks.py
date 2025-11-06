@@ -167,8 +167,27 @@ def process_tailoring_session(self, session_id: int) -> None:
         )
 
         # Record token usage for the user
+        # Use actual OpenAI token counts for accurate billing
+        prompt_tokens = token_usage.get("prompt_tokens", 0)
+        completion_tokens = token_usage.get("completion_tokens", 0)
+        total_tokens = token_usage.get("total_tokens", 0)
+        
+        # Fallback calculation if total not provided
+        if not total_tokens and (prompt_tokens or completion_tokens):
+            total_tokens = prompt_tokens + completion_tokens
+        
+        # Ensure we have valid positive numbers
+        total_tokens = max(0, total_tokens)
+        words_generated = max(0, words_generated)
+        
+        log_debug(
+            f"Recording usage: {total_tokens} tokens "
+            f"({prompt_tokens} prompt + {completion_tokens} completion), "
+            f"{words_generated} words"
+        )
+        
         user.record_usage(
-            tokens=token_usage.get("total_tokens", 0),
+            tokens=total_tokens,
             words=words_generated,
         )
 

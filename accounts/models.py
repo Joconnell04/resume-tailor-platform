@@ -30,7 +30,7 @@ class User(AbstractUser):
         choices=ROLE_CHOICES,
         default=JOB_SEEKER,
     )
-    token_quota = models.IntegerField(default=1000)
+    token_quota = models.IntegerField(default=10000)
     tokens_used = models.IntegerField(default=0)
     words_used = models.IntegerField(default=0)
 

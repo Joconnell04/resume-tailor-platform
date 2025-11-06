@@ -2,6 +2,7 @@
 Frontend views for tailoring app.
 """
 import logging
+import threading
 from copy import deepcopy
 from datetime import timedelta
 
@@ -42,8 +43,24 @@ def tailoring_list(request):
 def tailoring_detail(request, session_id):
     """Display tailoring session details."""
     session = get_object_or_404(TailoringSession, id=session_id, user=request.user)
+    
+    # Auto-start processing if still pending and hasn't been attempted yet
+    if session.status == TailoringSession.Status.PENDING:
+        try:
+            # Dispatch in background thread to avoid blocking the response
+            thread = threading.Thread(
+                target=_run_task_in_background,
+                args=(session.id,),
+                daemon=True
+            )
+            thread.start()
+            logger.info(f"Started background thread for session {session_id}")
+        except Exception as e:
+            logger.warning(f"Failed to start background thread for session {session_id}: {e}")
+    
     if _rescue_stuck_session(session):
         session.refresh_from_db()
+    
     context = {'session': session}
     return render(request, 'tailoring/detail.html', context)
 
@@ -130,24 +147,13 @@ def tailoring_create(request):
         )
         
         messages.success(request, f'Tailoring session created for "{job.title}".')
-        messages.warning(
+        messages.info(
             request,
-            'AI automation will run shortly. You can monitor progress on the session detail page.'
+            'Processing has started. This page will auto-refresh to show progress.'
         )
-        try:
-            process_tailoring_session.delay(session.id)
-        except (KombuOperationalError, CeleryOperationalError, ConnectionError):
-            process_tailoring_session.apply(args=(session.id,), throw=True)
-            messages.info(
-                request,
-                'Background queue unavailable, so tailoring ran immediately.'
-            )
-        except Exception as exc:  # noqa: BLE001
-            _mark_session_failed(session, f'Failed to dispatch tailoring task: {exc}')
-            messages.error(
-                request,
-                'We could not start the tailoring run. Please try again shortly.'
-            )
+        
+        # Redirect FIRST before starting any processing
+        # The detail page will handle dispatching the task if it hasn't started yet
         return redirect('tailoring_detail', session_id=session.id)
     
     default_parameters = AgentKitTailoringService.normalize_parameters(
@@ -162,6 +168,18 @@ def tailoring_create(request):
         'default_sections_text': default_sections_text,
     }
     return render(request, 'tailoring/create.html', context)
+
+
+@login_required
+def tailoring_delete(request, session_id):
+    """Delete a tailoring session owned by the current user."""
+    session = get_object_or_404(TailoringSession, id=session_id, user=request.user)
+    if request.method == 'POST':
+        session.delete()
+        messages.success(request, 'Tailoring session deleted.')
+        return redirect('tailoring_list')
+    messages.error(request, 'Invalid request.')
+    return redirect('tailoring_detail', session_id=session_id)
 
 
 def _rescue_stuck_session(session: TailoringSession) -> bool:
@@ -185,15 +203,9 @@ def _rescue_stuck_session(session: TailoringSession) -> bool:
                 session.id,
                 session.user_id,
             )
-            process_tailoring_session.apply(args=(session.id,), throw=True)
+            _dispatch_tailoring_task(session, allow_inline=True)
             mutated = True
-        except Exception as exc:  # noqa: BLE001
-            logger.error("Tailoring session %s failed to start: %s", session.id, exc)
-            _mark_session_failed(
-                session,
-                "Session could not start in time. Please retry.",
-                append_debug=str(exc),
-            )
+        except Exception:
             mutated = True
 
     elif (
@@ -210,6 +222,80 @@ def _rescue_stuck_session(session: TailoringSession) -> bool:
         mutated = True
 
     return mutated
+
+
+def _run_task_in_background(session_id: int) -> None:
+    """
+    Run the tailoring task in a background thread.
+    This function attempts Celery first, then falls back to direct execution.
+    """
+    try:
+        # Try to dispatch via Celery
+        process_tailoring_session.delay(session_id)
+        logger.info(f"Queued session {session_id} via Celery")
+    except (KombuOperationalError, CeleryOperationalError, ConnectionError) as e:
+        # Celery/Redis not available - run directly
+        logger.warning(f"Queue unavailable for session {session_id}, running inline: {e}")
+        try:
+            process_tailoring_session(session_id)
+            logger.info(f"Completed session {session_id} inline")
+        except Exception as inline_exc:
+            logger.error(f"Inline execution failed for session {session_id}: {inline_exc}")
+    except Exception as e:
+        logger.error(f"Unexpected error dispatching session {session_id}: {e}")
+
+
+def _dispatch_tailoring_task(
+    session: TailoringSession,
+    *,
+    request=None,
+    allow_inline: bool = True,
+) -> str:
+    """
+    Try to enqueue the tailoring task. Falls back to inline execution when possible.
+
+    Returns:
+        "queued" if the task was enqueued, "inline" if executed immediately.
+    """
+    try:
+        process_tailoring_session.delay(session.id)
+        return "queued"
+    except (KombuOperationalError, CeleryOperationalError, ConnectionError) as exc:
+        logger.warning(
+            "Queue unavailable for session %s. Falling back to inline execution. %s",
+            session.id,
+            exc,
+        )
+        if allow_inline:
+            try:
+                process_tailoring_session.apply(args=(session.id,), throw=True)
+                if request:
+                    messages.info(
+                        request,
+                        'Queue is offline, so tailoring ran immediately.',
+                    )
+                return "inline"
+            except Exception as inline_exc:  # noqa: BLE001
+                _mark_session_failed(
+                    session,
+                    "Tailoring session could not run because the queue is unavailable.",
+                    append_debug=str(inline_exc),
+                )
+                raise inline_exc
+
+        _mark_session_failed(
+            session,
+            "Tailoring session could not be queued.",
+            append_debug=str(exc),
+        )
+        raise exc
+    except Exception as exc:  # noqa: BLE001
+        _mark_session_failed(
+            session,
+            "Unexpected error when starting tailoring session.",
+            append_debug=str(exc),
+        )
+        raise exc
 
 
 def _mark_session_failed(

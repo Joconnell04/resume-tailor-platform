@@ -2,6 +2,227 @@
 
 {% block title %}Tailoring Session - MyApply{% endblock %}
 
+{% block extra_css %}
+{% if session.status == 'PENDING' or session.status == 'PROCESSING' %}
+<meta http-equiv="refresh" content="5">
+{% endif %}
+<style>
+.session-info-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+}
+
+.info-box {
+    padding: 1.25rem;
+    background: linear-gradient(135deg, rgba(26, 35, 50, 0.6), rgba(26, 35, 50, 0.4));
+    border: 2px solid rgba(74, 144, 226, 0.3);
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.info-box h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--accent-blue);
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.info-item {
+    margin-bottom: 0.75rem;
+}
+
+.info-label {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    margin-bottom: 0.25rem;
+}
+
+.info-value {
+    font-size: 1rem;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.view-job-btn {
+    display: inline-block;
+    margin-top: 1rem;
+    padding: 0.65rem 1.25rem;
+    background: linear-gradient(135deg, var(--accent-blue), var(--accent-light));
+    color: white;
+    text-decoration: none;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(74, 144, 226, 0.3);
+}
+
+.view-job-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(74, 144, 226, 0.5);
+    color: white;
+}
+
+.content-card {
+    margin-top: 1.5rem;
+    padding: 1.5rem;
+    background: linear-gradient(135deg, rgba(26, 35, 50, 0.6), rgba(26, 35, 50, 0.4));
+    border: 2px solid rgba(74, 144, 226, 0.3);
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    animation: slideIn 0.4s ease;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(15px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.content-card-header {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--accent-light);
+    margin-bottom: 1.25rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 2px solid rgba(74, 144, 226, 0.3);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.section-card {
+    margin-bottom: 1.5rem;
+    padding: 1.25rem;
+    background: rgba(26, 35, 50, 0.5);
+    border-left: 4px solid var(--accent-blue);
+    border-radius: 6px;
+    transition: all 0.3s ease;
+}
+
+.section-card:hover {
+    border-left-color: var(--accent-light);
+    background: rgba(74, 144, 226, 0.08);
+    transform: translateX(4px);
+}
+
+.section-card h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--accent-light);
+    margin-bottom: 1rem;
+}
+
+.bullet-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.bullet-list li {
+    padding-left: 1.5rem;
+    margin-bottom: 0.75rem;
+    position: relative;
+    line-height: 1.6;
+    color: var(--text-primary);
+}
+
+.bullet-list li:before {
+    content: "▸";
+    position: absolute;
+    left: 0;
+    color: var(--accent-blue);
+    font-weight: bold;
+}
+
+.cover-letter-text {
+    line-height: 1.8;
+    color: var(--text-primary);
+    white-space: pre-wrap;
+    font-size: 1rem;
+}
+
+.cover-letter-text p {
+    margin-bottom: 1.25rem;
+}
+
+.suggestions-list {
+    list-style: none;
+    padding: 0;
+}
+
+.suggestions-list li {
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.75rem;
+    background: rgba(74, 144, 226, 0.08);
+    border-left: 3px solid var(--accent-blue);
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.suggestions-list li:hover {
+    background: rgba(74, 144, 226, 0.15);
+    transform: translateX(4px);
+}
+
+.suggestions-list li:before {
+    content: "💡 ";
+    margin-right: 0.5rem;
+}
+
+.workflow-card {
+    margin-top: 2rem;
+    padding: 1.25rem;
+    background: rgba(26, 35, 50, 0.3);
+    border: 1px solid rgba(74, 144, 226, 0.2);
+    border-radius: 8px;
+}
+
+.workflow-card h2 {
+    font-size: 1.1rem;
+    color: var(--text-secondary);
+    margin-bottom: 1rem;
+}
+
+.delete-form {
+    display: inline;
+}
+
+.delete-btn {
+    margin-left: 0.75rem;
+}
+
+.session-info-box {
+    margin-top: 2rem;
+}
+
+.info-item-spaced {
+    margin-top: 1rem;
+}
+
+.processing-status {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.summary-text {
+    line-height: 1.8;
+    color: var(--text-primary);
+    font-size: 1.05rem;
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="tailoring-detail">
     <div class="card-header">
@@ -18,149 +239,129 @@
             {% else %}
             <span class="tag">{{ session.get_status_display }}</span>
             {% endif %}
+            <form method="post" action="{% url 'tailoring_delete' session.id %}" class="delete-form">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-small btn-danger delete-btn">Delete</button>
+            </form>
         </div>
     </div>
-
-    <div class="card mt-2">
-        <div class="card-header">
-            <h2 class="card-title">Session Info</h2>
-        </div>
-        <div class="card-body">
-            <div class="grid grid-2 mb-2">
-                <div>
-                    <p class="text-muted">Job</p>
-                    <p><strong>{{ session.job.title }}</strong> at {{ session.job.company }}</p>
-                    <a href="{% url 'job_detail' session.job.id %}" class="btn btn-small">View Job</a>
-                    {% if session.job_snapshot.source_url %}
-                    <p class="text-muted mt-1">Job URL</p>
-                    <p><a href="{{ session.job_snapshot.source_url }}" target="_blank" class="text-success">Open posting</a></p>
-                    {% endif %}
-                </div>
-                <div>
-                    <p class="text-muted">Created</p>
-                    <p>{{ session.created_at|date:"M d, Y H:i" }}</p>
-                    {% if session.completed_at %}
-                    <p class="text-muted">Completed</p>
-                    <p>{{ session.completed_at|date:"M d, Y H:i" }}</p>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-    </div>
-
-    {% with params=session.parameters usage=session.token_usage %}
-    <div class="card mt-2">
-        <div class="card-header">
-            <h2 class="card-title">Workflow Details</h2>
-        </div>
-        <div class="card-body">
-            <div class="grid grid-2 meta-grid">
-                <div>
-                    <p class="text-muted">Parameters</p>
-                    <ul class="meta-list">
-                        <li><strong>Tone:</strong> {{ params.tone|default:"—" }}</li>
-                        <li><strong>Sections:</strong>
-                            {% if params.sections %}
-                            {{ params.sections|join:', ' }}
-                            {% else %}—{% endif %}
-                        </li>
-                        <li><strong>Bullets per Section:</strong> {{ params.bullets_per_section|default:"—" }}</li>
-                        <li><strong>Include Summary:</strong> {{ params.include_summary|yesno:"Yes,No" }}</li>
-                        <li><strong>Include Cover Letter:</strong> {{ params.include_cover_letter|yesno:"Yes,No" }}</li>
-                    </ul>
-                </div>
-                <div>
-                    <p class="text-muted">Runtime Metrics</p>
-                    <ul class="meta-list">
-                        <li><strong>Run ID:</strong> {{ session.openai_run_id|default:"—" }}</li>
-                        <li>
-                            <strong>Tokens:</strong>
-                            {% if usage.total_tokens %}
-                                {{ usage.total_tokens }} total
-                                ({{ usage.prompt_tokens|default:0 }} prompt /
-                                {{ usage.completion_tokens|default:0 }} completion)
-                            {% else %}
-                                —
-                            {% endif %}
-                        </li>
-                        <li><strong>Words Generated:</strong> {{ usage.words_generated|default:"—" }}</li>
-                        <li><strong>Status:</strong> {{ session.get_status_display }}</li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-    </div>
-    {% endwith %}
 
     {% if session.generated_sections %}
-    <div class="card mt-2">
-        <div class="card-header">
-            <h2 class="card-title">Generated Sections</h2>
-        </div>
-        <div class="card-body section-grid">
-            {% for section in session.generated_sections %}
-            <div class="section-card">
-                <h3>{{ section.name }}</h3>
-                <ul class="bullet-list">
-                    {% for bullet in section.bullets %}
-                    <li>{{ bullet }}</li>
-                    {% endfor %}
-                </ul>
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-    {% elif session.generated_bullets %}
-    <div class="card mt-2">
-        <div class="card-header">
-            <h2 class="card-title">Generated Bullets</h2>
-        </div>
-        <div class="card-body">
+    <div class="content-card">
+        <h2 class="content-card-header">📝 Generated Sections</h2>
+        {% for section in session.generated_sections %}
+        <div class="section-card">
+            <h3>{{ section.name }}</h3>
             <ul class="bullet-list">
-                {% for bullet in session.generated_bullets %}
+                {% for bullet in section.bullets %}
                 <li>{{ bullet }}</li>
                 {% endfor %}
             </ul>
         </div>
+        {% endfor %}
+    </div>
+    {% elif session.generated_bullets %}
+    <div class="content-card">
+        <h2 class="content-card-header">📝 Generated Bullets</h2>
+        <ul class="bullet-list">
+            {% for bullet in session.generated_bullets %}
+            <li>{{ bullet }}</li>
+            {% endfor %}
+        </ul>
     </div>
     {% endif %}
 
     {% if session.tailored_resume %}
-    <div class="card mt-2">
-        <div class="card-header">
-            <h2 class="card-title">Summary</h2>
-        </div>
-        <div class="card-body">
-            <p class="summary-text">{{ session.tailored_resume }}</p>
-        </div>
+    <div class="content-card">
+        <h2 class="content-card-header">✨ Professional Summary</h2>
+        <p class="summary-text">{{ session.tailored_resume }}</p>
     </div>
     {% endif %}
 
     {% if session.cover_letter %}
-    <div class="card mt-2">
-        <div class="card-header">
-            <h2 class="card-title">Cover Letter</h2>
-        </div>
-        <div class="card-body">
-            <div class="code-block">
-                <pre>{{ session.cover_letter }}</pre>
-            </div>
-        </div>
+    <div class="content-card">
+        <h2 class="content-card-header">✉️ Cover Letter</h2>
+        <div class="cover-letter-text">{{ session.cover_letter|linebreaksbr }}</div>
     </div>
     {% endif %}
 
     {% if session.ai_suggestions %}
-    <div class="card mt-2">
-        <div class="card-header">
-            <h2 class="card-title">AI Suggestions</h2>
+    <div class="content-card">
+        <h2 class="content-card-header">💡 AI Suggestions</h2>
+        <ul class="suggestions-list">
+            {% for suggestion in session.ai_suggestions.splitlines %}
+            <li>{{ suggestion }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <!-- Session Info -->
+    <div class="info-box session-info-box">
+        <h3>📋 Session Information</h3>
+        <div class="info-item">
+            <div class="info-label">Job Position</div>
+            <div class="info-value"><strong>{{ session.job.title }}</strong> at {{ session.job.company }}</div>
         </div>
-        <div class="card-body">
-            <div class="suggestion-list">
-                {{ session.ai_suggestions|linebreaks }}
+        <a href="{% url 'job_detail' session.job.id %}" class="view-job-btn">View Job Details →</a>
+        {% if session.job_snapshot.source_url %}
+        <div class="info-item info-item-spaced">
+            <div class="info-label">Source URL</div>
+            <div class="info-value"><a href="{{ session.job_snapshot.source_url }}" target="_blank" class="text-success">Open Job Posting ↗</a></div>
+        </div>
+        {% endif %}
+        <div class="info-item info-item-spaced">
+            <div class="info-label">Created</div>
+            <div class="info-value">{{ session.created_at|date:"M d, Y H:i" }}</div>
+        </div>
+        {% if session.completed_at %}
+        <div class="info-item">
+            <div class="info-label">Completed</div>
+            <div class="info-value">{{ session.completed_at|date:"M d, Y H:i" }}</div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Workflow Details -->
+    {% with params=session.parameters usage=session.token_usage %}
+    <div class="workflow-card">
+        <h2>⚙️ Workflow Details</h2>
+        <div class="grid grid-2 meta-grid">
+            <div>
+                <p class="text-muted">Parameters</p>
+                <ul class="meta-list">
+                    <li><strong>Tone:</strong> {{ params.tone|default:"—" }}</li>
+                    <li><strong>Sections:</strong>
+                        {% if params.sections %}
+                        {{ params.sections|join:', ' }}
+                        {% else %}—{% endif %}
+                    </li>
+                    <li><strong>Bullets per Section:</strong> {{ params.bullets_per_section|default:"—" }}</li>
+                    <li><strong>Include Summary:</strong> {{ params.include_summary|yesno:"Yes,No" }}</li>
+                    <li><strong>Include Cover Letter:</strong> {{ params.include_cover_letter|yesno:"Yes,No" }}</li>
+                </ul>
+            </div>
+            <div>
+                <p class="text-muted">Runtime Metrics</p>
+                <ul class="meta-list">
+                    <li><strong>Run ID:</strong> {{ session.openai_run_id|default:"—" }}</li>
+                    <li>
+                        <strong>Tokens:</strong>
+                        {% if usage.total_tokens %}
+                            {{ usage.total_tokens }} total
+                            ({{ usage.prompt_tokens|default:0 }} prompt /
+                            {{ usage.completion_tokens|default:0 }} completion)
+                        {% else %}
+                            —
+                        {% endif %}
+                    </li>
+                    <li><strong>Words Generated:</strong> {{ usage.words_generated|default:"—" }}</li>
+                    <li><strong>Status:</strong> {{ session.get_status_display }}</li>
+                </ul>
             </div>
         </div>
     </div>
-    {% endif %}
+    {% endwith %}
 
     {% if session.debug_log %}
     <div class="card mt-2">
@@ -179,9 +380,15 @@
     {% if session.status == 'PENDING' or session.status == 'PROCESSING' %}
     <div class="card mt-2">
         <div class="card-body">
-            <p class="text-warning">
-                <strong>Heads up:</strong> This session is still running. Refresh the page in a bit to see updated results.
-            </p>
+            <div class="processing-status">
+                <div class="spinner"></div>
+                <div>
+                    <p class="text-warning">
+                        <strong>Processing in progress...</strong>
+                    </p>
+                    <p class="text-muted">Page will auto-refresh every 5 seconds. <span id="countdown">5</span>s</p>
+                </div>
+            </div>
         </div>
     </div>
     {% endif %}
@@ -199,4 +406,23 @@
     </div>
     {% endif %}
 </div>
+{% endblock %}
+
+{% block extra_js %}
+{% if session.status == 'PENDING' or session.status == 'PROCESSING' %}
+<script>
+// Countdown timer for auto-refresh
+let countdown = 5;
+const countdownElement = document.getElementById('countdown');
+if (countdownElement) {
+    setInterval(() => {
+        countdown--;
+        if (countdown <= 0) {
+            countdown = 5;
+        }
+        countdownElement.textContent = countdown;
+    }, 1000);
+}
+</script>
+{% endif %}
 {% endblock %}
