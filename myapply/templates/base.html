@@ -5,38 +5,45 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}MyApply - Resume Tailoring Platform{% endblock %}</title>
     {% load static %}
-    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
     {% block extra_css %}{% endblock %}
 </head>
 <body>
+    <!-- Navigation Bar -->
     <nav class="navbar">
         <div class="nav-container">
             <div class="logo">
-                MyApply
+                <a href="{% url 'dashboard' %}" class="logo-link">My<span>Apply</span></a>
             </div>
+
             {% if user.is_authenticated %}
             <ul class="nav-menu">
-                <li><a href="{% url 'dashboard' %}">Dashboard</a></li>
-                <li><a href="{% url 'experience:list' %}">Experience</a></li>
-                <li><a href="{% url 'job_list' %}">Jobs</a></li>
-                <li><a href="{% url 'tailoring_list' %}">Tailoring</a></li>
+                <li><a href="{% url 'dashboard' %}" class="nav-link">Dashboard</a></li>
+                <li><a href="{% url 'experience:list' %}" class="nav-link">Experience</a></li>
+                <li><a href="{% url 'job_list' %}" class="nav-link">Jobs</a></li>
+                <li><a href="{% url 'tailoring_list' %}" class="nav-link">Tailoring</a></li>
                 {% if user.is_staff %}
-                <li><a href="/admin/" target="_blank">Admin</a></li>
+                <li><a href="/admin/" target="_blank" class="nav-link">Admin</a></li>
                 {% endif %}
             </ul>
+
             <div class="nav-user">
-                <span class="user-name">{{ user.username }}</span>
-                <span class="token-count">{{ user.tokens_available }} tokens</span>
-                <a href="{% url 'logout' %}" class="btn-logout">Logout</a>
+                <div class="user-info">
+                    <span class="user-name">{{ user.username }}</span>
+                    <span class="token-count">{{ user.tokens_available }} tokens</span>
+                </div>
+                <a href="{% url 'logout' %}" class="btn btn-logout">Logout</a>
             </div>
+
             {% else %}
             <div class="nav-user">
-                <a href="{% url 'login' %}" class="btn-login">Login</a>
+                <a href="{% url 'login' %}" class="btn btn-login">Login</a>
             </div>
             {% endif %}
         </div>
     </nav>
 
+    <!-- Main Content -->
     <main class="container">
         {% if messages %}
         <div class="messages">
@@ -49,9 +56,10 @@
         {% block content %}{% endblock %}
     </main>
 
+    <!-- Footer -->
     <footer class="footer">
         <div class="footer-container">
-            <p>MyApply &copy; 2025 | Built with Django & OpenAI</p>
+            <p>&copy; 2025 <strong>MyApply</strong> | Built with <span class="tech">Django</span> & <span class="tech">OpenAI</span></p>
         </div>
     </footer>
 
