@@ -9,17 +9,46 @@ from .models import JobPosting
 
 @login_required
 def job_list(request):
-    """List all jobs for the user."""
-    jobs = JobPosting.objects.filter(user=request.user).order_by('-created_at')
+    """List all jobs for the user with tailoring session data."""
+    from django.db.models import Count, Prefetch
+    from tailoring.models import TailoringSession
+
+    jobs = JobPosting.objects.filter(user=request.user)\
+        .prefetch_related(
+            Prefetch(
+                'tailoring_sessions',
+                queryset=TailoringSession.objects.order_by('-created_at')
+            )
+        )\
+        .annotate(session_count=Count('tailoring_sessions'))\
+        .order_by('-created_at')
+
     context = {'jobs': jobs}
     return render(request, 'jobs/list.html', context)
 
 
 @login_required
 def job_detail(request, job_id):
-    """Display job details."""
-    job = get_object_or_404(JobPosting, id=job_id, user=request.user)
-    context = {'job': job}
+    """Display job details with tailoring sessions."""
+    from django.db.models import Prefetch
+    from tailoring.models import TailoringSession
+
+    job = get_object_or_404(
+        JobPosting.objects.prefetch_related(
+            Prefetch(
+                'tailoring_sessions',
+                queryset=TailoringSession.objects.order_by('-created_at')
+            )
+        ),
+        id=job_id,
+        user=request.user
+    )
+
+    tailoring_stats = job.get_tailoring_stats()
+    context = {
+        'job': job,
+        'tailoring_stats': tailoring_stats
+    }
     return render(request, 'jobs/detail.html', context)
 
 

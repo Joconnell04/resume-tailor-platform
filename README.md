@@ -1,6 +1,6 @@
 # MyApply Resume Tailor
 
-This is the class project where I’m building a lightweight resume tailoring portal on top of Django. Job seekers can track roles they’re interested in, store a structured "experience graph," and run an OpenAI-powered workflow that spits out tailored resume bullets. Everything runs against MySQL and a Celery worker so the browser never blocks while OpenAI does its thing.
+This is the class project where I’m building a lightweight resume tailoring portal on top of Django. Job seekers can track roles they’re interested in, store a structured "experience graph," and run a staged OpenAI workflow that builds job profiles, selects experience snippets, and returns guardrail-checked resume bullets. Everything runs against MySQL and a Celery worker so the browser never blocks while OpenAI does its thing.
 
 ## What lives in each app?
 
@@ -15,8 +15,8 @@ This is the class project where I’m building a lightweight resume tailoring po
 ## Stack + infrastructure
 
 - **Backend**: Django 4.2, Python 3.10+, Django REST Framework for the API, Celery 5 with Redis for background jobs.
-- **Database**: MySQL only. There’s no SQLite fallback anywhere, so make sure you have a running MySQL 8 instance for dev and tests.
-- **AI**: OpenAI Responses API (model defaults to `gpt-4.1-mini`). The service handles prompt building, requirement extraction, and output parsing.
+- **Database**: MySQL only. There's no SQLite fallback anywhere, so make sure you have a running MySQL 8 instance for dev and tests.
+- **AI**: OpenAI **Responses API** (model defaults to `gpt-4o-mini`). The tailoring service uses the Responses API with JSON mode (`text.format.type = "json_object"`) to ensure reliable structured output. It builds job profiles, scores experience snippets, orchestrates staged generation + guardrail passes, and records token usage per call. Web search tool integration enables automatic job posting fetching from URLs and location coordinate extraction.
 - **Other services**: Redis (broker + result backend), optional Mapbox token waiting for the maps feature.
 - **Frontend**: Django template system with all templates scoped to each app, plus a shared CSS file in `static/css/style.css`.
 
@@ -69,24 +69,24 @@ python manage.py test
 ### Job tracking
 - Single form that accepts a posting URL, raw description text, or both.
 - Metadata fields (company, location, parsed_requirements, etc.) live on the `JobPosting` model, so the tailoring task can reuse them without re-scraping.
+- **Visual Relationship Dashboard**: Each job card shows connected tailoring sessions with real-time status indicators
+- **Session Analytics**: Track completion rates, token usage, and success metrics per job
+- **Timeline Visualization**: View chronological history of all tailoring attempts for each job
+- **Quick Actions**: Create new tailoring sessions directly from job cards with one click
 
 ### Tailoring workflow
-- Creates a `TailoringSession` with snapshots of the job data and the user's experience graph.
-- Users choose sections, tone, bullet counts, and whether to include summaries or cover letters before submitting.
-- **4-Stage Optimized Pipeline**:
-  1. **Job Analysis**: Extract ATS-critical keywords, required vs. preferred skills, certifications, years of experience
-  2. **Experience Matching**: Score and rank experiences, select top 5 most relevant (60% token reduction)
-  3. **AI Generation**: Call OpenAI with optimized prompt emphasizing ATS compatibility and recruiter appeal
-  4. **Quality Validation**: Calculate ATS score (0-100%), validate bullet quality, provide actionable suggestions
-- **OpenAI Web Search**: When a job URL is provided, OpenAI's grounding/web search automatically fetches the complete job posting, eliminating need for custom scraping
-- **ATS Scoring**: Every session receives an ATS compatibility score showing keyword match, required skills coverage, and missing critical elements
-- **Token Optimization**: Reduced from ~7,150 to ~4,400 tokens per session (38% savings) through smart experience filtering
+- Creates a `TailoringSession` with snapshots of the job data and the user's experience graph, plus the exact tailoring parameters supplied by the UI/API.
+- Normalizes those parameters (sections, tone, bullet counts, stretch level, cover-letter inserts) and builds a compact job profile with requirement buckets.
+- Scores every experience/leadership/project node in the graph, trims to the top snippets per bucket, and sends summaries—never the raw wall of text—to OpenAI.
+- **Staged OpenAI Responses API calls** (using JSON mode):
+  1. **Resume generation** – Uses the Responses API with `text.format` set to `json_object` for reliable structured output. When a job URL is provided, the `web_search` tool fetches the complete posting. Returns sectioned bullets tied to snippet IDs with self-reported stretch metadata. Also extracts job location with approximate latitude/longitude coordinates.
+  2. **Guardrail audit** – Replays each bullet against the source snippet and stretch policy with JSON mode enabled; only the lines that fail get regenerated.
+  3. **Cover letter (optional)** – Produces a three-paragraph letter that reuses the same snippets plus any user-supplied talking points, also in JSON mode.
+- All OpenAI calls use the **Responses API** (`/v1/responses`) with `text.format.type = "json_object"` to ensure valid JSON output without markdown wrapping or formatting issues.
+- ATS scoring and bullet quality checks still run locally so every session comes with a keyword report and metric reminders.
+- Guardrail findings, bullet details, section layout, cover-letter talking points, job location data, and token usage for every call live in `TailoringSession.output_metadata`.
 - Token usage and word counts are recorded back onto the user for quota tracking.
-- Session detail page shows statuses, run IDs, token stats, ATS scores, generated content, and a collapsible debug log for troubleshooting.
-- If the queue is unavailable when you start a run, the session is marked failed instantly with guidance so the UI never stalls.
-- Status badges expect uppercase strings (`PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`), so keep enum values in sync with the model.
-- Sessions that sit in `PENDING` longer than the configured timeout automatically retry or get marked failed with a clear message; `PROCESSING` sessions get the same treatment if they exceed their window.
-- Creating a session returns immediately—the async worker handles the heavy lifting—and you can delete a run from its detail page if something goes wrong.
+- Session detail pages surface statuses, run IDs, guardrail notes, token stats, ATS scores, generated content, and a collapsible debug log for troubleshooting.
 
 ### Dashboard + profiles
 - Dashboard pulls recent jobs, tailoring sessions, and token counts.
@@ -107,7 +107,7 @@ DB_PASSWORD=...
 DB_HOST=localhost
 DB_PORT=3306
 OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-4.1-mini
+OPENAI_MODEL=gpt-4o-mini
 CELERY_BROKER_URL=redis://127.0.0.1:6379/0
 CELERY_RESULT_BACKEND=redis://127.0.0.1:6379/0
 TAILORING_PENDING_TIMEOUT_MINUTES=5
@@ -120,83 +120,13 @@ LOG_LEVEL=INFO
 
 The project relies on JSON columns, MySQL-specific ordering, and long-running Celery jobs that expect a real database connection. Tests and dev use the same MySQL instance so that I don’t get surprised by behavior differences later. If MySQL isn’t available, the app just won’t boot.
 
-## ATS Optimization Strategy
+## ATS + guardrail toolkit
 
-### Overview
-The platform uses a comprehensive ATS (Applicant Tracking System) optimization strategy to maximize both automated filtering success and recruiter appeal.
-
-### Key Features
-
-#### 1. Enhanced Keyword Extraction (200+ keywords)
-- **Technical Skills**: Python, Java, JavaScript, AWS, Azure, Docker, Kubernetes, React, Django, etc.
-- **Action Verbs**: Led, Managed, Developed, Achieved, Optimized, Implemented, etc.
-- **Soft Skills**: Leadership, Communication, Problem-Solving, Project Management, etc.
-- **Certifications**: AWS Certified, PMP, CISSP, Scrum Master, etc.
-- **Multi-word Detection**: "machine learning", "aws certified", "data science"
-
-#### 2. Advanced Job Requirements Parsing
-Automatically categorizes:
-- **Required Skills** (60% of ATS score) - Must-have qualifications
-- **Preferred Skills** (10% of ATS score) - Nice-to-have qualifications
-- **Years of Experience** - Extracted from patterns like "5+ years"
-- **Education Requirements** - Bachelor's, Master's, PhD, MBA
-- **Certifications** - Detected across full job description
-
-#### 3. ATS Scoring Methodology
-```
-Overall Score = (Required Skills × 0.60) + (Keywords × 0.30) + (Preferred Skills × 0.10)
-```
-
-**Score Interpretation:**
-- **85-100%**: Excellent (95% ATS pass rate)
-- **70-84%**: Good (75% ATS pass rate)
-- **50-69%**: Fair (40% ATS pass rate)
-- **<50%**: Poor (10% ATS pass rate)
-
-#### 4. Bullet Point Quality Validation
-Every bullet is checked for:
-- ✅ Strong action verb at start
-- ✅ Metrics included (%, $, numbers)
-- ✅ Optimal length (100-180 characters)
-- ✅ Proper capitalization
-- ✅ Keyword density
-
-#### 5. Prompt Engineering for ATS
-**Critical ATS Rules:**
-1. 🎯 Keyword density - Include ALL required skills
-2. 💪 Action verbs - Start EVERY bullet with strong verb
-3. 📊 Quantify everything - 80%+ bullets have metrics
-4. 🎓 Mirror job language - Use exact terminology
-5. 📏 Optimal length - 100-180 characters
-6. 🏆 Impact formula - Action + Task + Tool + Result + Impact
-
-**Bullet Point Formula:**
-```
-[Action Verb] + [Specific Activity] + [with X tool/skill] + 
-[achieving Y% improvement] + [resulting in $Z impact]
-```
-
-**Example:**
-```
-Developed automated ETL pipeline using Python and Airflow, reducing data 
-processing time by 65% and saving $120K annually in infrastructure costs
-```
-
-### Performance Metrics
-
-| Metric | Before | After | Improvement |
-|--------|--------|-------|-------------|
-| **Token Usage** | 7,150 | 4,400 | -38% |
-| **ATS Pass Rate** | ~60% | ~85% | +42% |
-| **Required Skills Coverage** | ~70% | ~95% | +36% |
-| **Keyword Match** | ~55% | ~85% | +55% |
-| **Bullets with Metrics** | ~40% | ~80% | +100% |
-| **Action Verb Usage** | ~65% | ~100% | +54% |
-
-### Cost Savings
-At $0.002 per 1K tokens:
-- **Per session**: $0.0055 saved
-- **Per 100K sessions**: **$550 saved**
+- **Keyword + requirement extraction**: pulls skills, verbs, certifications, experience, and education into dedicated buckets so both ATS scoring and snippet matching reuse the same data set.
+- **ATS scoring**: weighs required skills, overall keyword coverage, and preferred skills to produce the percentage that shows up in the UI.
+- **Bullet validator**: checks action verbs, length, and metrics before surfacing suggestions back to the user.
+- **Stretch guardrails**: OpenAI double-checks every bullet against the original snippet, applies the requested stretch policy (0–3), and regenerates only what fails.
+- **Token tracking**: prompt/completion totals from every OpenAI call are merged and stored with the session for quota awareness.
 
 ### Using the System
 
@@ -237,122 +167,24 @@ At $0.002 per 1K tokens:
 
 ### Architecture
 
-#### Service Layer (`tailoring/services.py`)
-**TailoringService Class:**
-- `run_workflow()` - Main orchestrator method
-- `_generate_tailored_content()` - OpenAI API integration with grounding
-- `_parse_job_description()` - Extracts requirements, skills, certifications
-- `_calculate_ats_score()` - Computes ATS compatibility percentage
-- `_score_bullets()` - Validates bullet point quality
-- `_build_prompt()` - Creates optimized prompt for OpenAI
+**Service layer (`tailoring/services.py`)**
+- `run_workflow()` orchestrates everything: job profiling, snippet selection, staged OpenAI calls with JSON mode, and ATS analysis.
+- `_build_job_profile()` distills the job description into requirement buckets for later reuse.
+- `_collect_experience_snippets()` scores experience/leadership/project nodes and returns compact summaries.
+- `_generate_resume_package()` calls OpenAI Responses API with `text.format.type = "json_object"`, runs guardrails/regeneration, and aggregates token usage.
+- `_call_openai_json()` constructs the Responses API request with JSON mode enabled to ensure valid, parseable output without markdown wrapping.
+- `_apply_guardrails()` and `_regenerate_bullets()` enforce the stretch policy before anything is saved.
 
-**Key Implementation Details:**
-```python
-# OpenAI Grounding Parameter (Web Search)
-grounding = {
-    "type": "web_search",
-    "web_search": {
-        "queries": [f"job posting {source_url}"]
-    }
-}
+**Background task (`tailoring/tasks.py`)**
+- `process_tailoring_session()` locks the session, grabs the latest experience graph, normalizes parameters, and invokes the service.
+- Persists generated sections, suggestions, cover letter, token stats, guardrail findings, and talking points back onto the session.
 
-# ATS Scoring Formula
-required_skills_score = matched_required / total_required * 100
-keyword_score = matched_keywords / total_keywords * 100
-preferred_skills_score = matched_preferred / total_preferred * 100
-
-overall_score = (
-    required_skills_score * 0.60 +
-    keyword_score * 0.30 +
-    preferred_skills_score * 0.10
-)
-```
-
-#### Background Tasks (`tailoring/tasks.py`)
-**Celery Task:** `process_tailoring_session(session_id)`
-- Loads session and experience graph from database
-- Extracts job description from `raw_description` field
-- Invokes `TailoringService.run_workflow()` with OpenAI grounding
-- Saves tailored content and ATS metadata
-- Updates session status to 'completed' or 'failed'
-
-**Job Snapshot Structure:**
-```python
-{
-    "url": source_url,
-    "raw_description": raw_description,
-    "fetched_at": datetime.now().isoformat()
-}
-```
-
-### Prompt Engineering
-
-#### System Prompt Structure
-```
-You are an expert resume consultant specializing in ATS optimization.
-
-Given:
-1. Candidate's experience graph (skills, roles, achievements)
-2. Job description (OpenAI will fetch from URL if provided)
-
-Generate:
-- Tailored bullet points with metrics
-- ATS-optimized keyword coverage
-- Suggestions for improvement
-```
-
-#### Critical ATS Instructions
-```
-CRITICAL ATS RULES:
-1. 🎯 Keyword density - Include ALL required skills
-2. 💪 Action verbs - Start EVERY bullet with strong verb
-3. 📊 Quantify everything - 80%+ bullets have metrics
-4. 🎓 Mirror job language - Use exact terminology
-5. 📏 Optimal length - 100-180 characters per bullet
-6. 🏆 Impact formula - Action + Task + Tool + Result + Impact
-
-BULLET POINT FORMULA:
-[Action Verb] + [Specific Activity] + [with X tool/skill] + 
-[achieving Y% improvement] + [resulting in $Z impact]
-```
-
-#### Token Optimization Techniques
-1. **Experience Graph Condensation** - Only include relevant skills/achievements
-2. **Job Description Parsing** - Extract key sections (requirements, qualifications)
-3. **Structured Output** - Use JSON schema to minimize verbose responses
-4. **Model Selection** - gpt-4o-mini for cost efficiency
-5. **Grounding Over Scraping** - Let OpenAI fetch job posting (more efficient)
-
-### Database Schema
-
-#### TailoringSession Model
-```python
-class TailoringSession(models.Model):
-    user = ForeignKey(User)
-    title = CharField(max_length=255)
-    status = CharField(choices=['pending', 'processing', 'completed', 'failed'])
-    raw_description = TextField()  # Job description or URL
-    job_snapshot = JSONField()     # Captured job data
-    tailored_content = JSONField() # Generated bullets/suggestions
-    ats_metadata = JSONField()     # Scores and keyword analysis
-    created_at = DateTimeField()
-    updated_at = DateTimeField()
-```
-
-#### ATS Metadata Structure
-```json
-{
-  "overall_score": 87.3,
-  "required_skills_score": 93.3,
-  "keyword_score": 82.5,
-  "preferred_skills_score": 75.0,
-  "missing_required_skills": ["Kubernetes", "GraphQL"],
-  "matched_keywords": ["Python", "AWS", "Django", "React"],
-  "bullet_scores": [
-    {"text": "...", "score": 90, "has_metric": true, "has_action_verb": true}
-  ]
-}
-```
+**Stored metadata**
+`TailoringSession.output_metadata` now holds:
+- `bullet_details` – snippet IDs, stretch levels, and metrics for every bullet.
+- `guardrails` – status + reason codes for any audited bullet.
+- `section_layout` – the normalized sections used during generation.
+- `cover_letter_talking_points` – short highlights surfaced to the UI.
 
 ### Testing
 
@@ -390,27 +222,34 @@ celery -A config worker -l info
 
 #### For Developers
 
-1. **Always Use Grounding for URLs**
+1. **Always Use JSON Mode for Responses API**
+   - Set `text.format.type = "json_object"` in all OpenAI Responses API calls
+   - This prevents markdown wrapping and malformed JSON issues
+   - Never rely on the model to voluntarily format JSON correctly
+
+2. **Use Web Search Tool for URLs**
    - More reliable than custom scraping
    - Handles dynamic content automatically
    - Reduces maintenance overhead
+   - Enable by adding `{"type": "web_search"}` to the `tools` array
 
-2. **Monitor Token Usage**
+3. **Monitor Token Usage**
    - Current average: ~4,400 tokens/session
    - Alert if sessions exceed 7,000 tokens
    - Optimize prompts when possible
 
-3. **ATS Score Thresholds**
+4. **ATS Score Thresholds**
    - Block submissions <50% (warn user)
    - Suggest improvements for 50-84%
    - Approve 85%+ automatically
 
-4. **Error Handling**
-   - Graceful fallback if OpenAI grounding fails
-   - Log all API errors for debugging
+5. **Error Handling**
+   - Graceful fallback if OpenAI returns errors
+   - Log all API errors with payload previews for debugging
    - Provide clear user feedback
+   - JSON parsing errors now include line/column numbers and preview
 
-5. **Keyword Maintenance**
+6. **Keyword Maintenance**
    - Update keyword lists quarterly
    - Add emerging technologies (e.g., new frameworks)
    - Remove deprecated terms
@@ -448,12 +287,17 @@ ATS_CRITICAL_THRESHOLD = 50  # Minimum acceptable
 
 ### Common Issues
 
+**Issue: JSON Parsing Errors from OpenAI**
+- **Cause**: Missing `text.format` parameter in Responses API call, causing model to output unstructured text
+- **Fix**: Ensure all `_call_openai_json()` calls include `"text": {"format": {"type": "json_object"}}` in request params
+- **Validation**: Check logs for "Failed to parse OpenAI JSON payload" - should not occur with JSON mode enabled
+
 **Issue: Low ATS Score (<70%)**
 - **Cause**: Missing required skills or keywords
 - **Fix**: Review "missing_required_skills" in ats_metadata, update experience graph
 
 **Issue: OpenAI API Timeout**
-- **Cause**: Large job descriptions or slow grounding
+- **Cause**: Large job descriptions or slow web search
 - **Fix**: Increase timeout in settings, retry task, check OpenAI status
 
 **Issue: No Metrics in Bullets**
@@ -480,6 +324,15 @@ python manage.py shell
 >>> from tailoring.tasks import process_tailoring_session
 >>> process_tailoring_session.apply_async(args=[session.id])
 ```
+
+## Recent Updates
+
+**November 2025 - JSON Mode Fix**
+- Fixed JSON parsing errors by adding `text.format.type = "json_object"` to all OpenAI Responses API calls
+- This ensures the model returns valid JSON without markdown wrapping or formatting issues
+- Enhanced error logging to show line/column numbers and payload previews for debugging
+- Updated all documentation to reflect proper Responses API usage with JSON mode
+- The previous agent's integration of the Responses API was correct; the issue was missing the JSON format specification
 
 ## Old scripts & docs
 

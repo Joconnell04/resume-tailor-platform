@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}MyApply - Resume Tailoring Platform{% endblock %}</title>
     {% load static %}
+    {% load tailoring_filters %}
     <link rel="stylesheet" href="{% static 'css/style.css' %}">
     {% block extra_css %}{% endblock %}
 </head>
@@ -12,21 +13,22 @@
     <nav class="navbar">
         <div class="nav-container">
             <div class="logo">
-                MyApply
+                <span class="logo-icon">✦</span>
+                <span class="logo-text">MyApply</span>
             </div>
             {% if user.is_authenticated %}
             <ul class="nav-menu">
-                <li><a href="{% url 'dashboard' %}">Dashboard</a></li>
-                <li><a href="{% url 'experience:list' %}">Experience</a></li>
-                <li><a href="{% url 'job_list' %}">Jobs</a></li>
-                <li><a href="{% url 'tailoring_list' %}">Tailoring</a></li>
+                <li><a href="{% url 'dashboard' %}" class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">Dashboard</a></li>
+                <li><a href="{% url 'experience:list' %}" class="nav-link {% if 'experience' in request.path %}active{% endif %}">Experience</a></li>
+                <li><a href="{% url 'job_list' %}" class="nav-link {% if 'jobs' in request.path and 'job_list' in request.resolver_match.url_name %}active{% endif %}">Jobs</a></li>
+                <li><a href="{% url 'tailoring_list' %}" class="nav-link {% if 'tailoring' in request.path %}active{% endif %}">Tailoring</a></li>
+                <li><a href="{% url 'about' %}" class="nav-link {% if request.resolver_match.url_name == 'about' %}active{% endif %}">About</a></li>
                 {% if user.is_staff %}
-                <li><a href="/admin/" target="_blank">Admin</a></li>
+                <li><a href="/admin/" target="_blank" class="nav-link">Admin</a></li>
                 {% endif %}
             </ul>
             <div class="nav-user">
-                <span class="user-name">{{ user.username }}</span>
-                <span class="token-count">{{ user.tokens_available }} tokens</span>
+                <a href="{% url 'profile_view' %}" class="btn-profile {% if 'profile' in request.path %}active-btn{% endif %}">Profile</a>
                 <a href="{% url 'logout' %}" class="btn-logout">Logout</a>
             </div>
             {% else %}

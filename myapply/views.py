@@ -11,6 +11,11 @@ from jobs.models import JobPosting
 from tailoring.models import TailoringSession
 
 
+def about_view(request):
+    """About page view."""
+    return render(request, 'about.html')
+
+
 def login_view(request):
     """Handle user login."""
     if request.user.is_authenticated:
@@ -44,7 +49,14 @@ def dashboard(request):
     user = request.user
     
     # Get counts
-    experience_count = ExperienceGraph.objects.filter(user=user).count()
+    experience_count = 0
+    try:
+        experience_graph = ExperienceGraph.objects.get(user=user)
+        experiences = experience_graph.graph_json.get('experiences', [])
+        experience_count = len(experiences)
+    except ExperienceGraph.DoesNotExist:
+        experience_count = 0
+    
     job_count = JobPosting.objects.filter(user=user).count()
     tailoring_count = TailoringSession.objects.filter(user=user).count()
     

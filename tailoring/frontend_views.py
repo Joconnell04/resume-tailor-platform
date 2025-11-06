@@ -69,6 +69,16 @@ def tailoring_detail(request, session_id):
 def tailoring_create(request):
     """Create a new tailoring session."""
     jobs = JobPosting.objects.filter(user=request.user).order_by('-created_at')
+
+    # Get pre-selected job from query parameter
+    preselected_job_id = request.GET.get('job_id')
+    preselected_job = None
+    if preselected_job_id:
+        try:
+            preselected_job = JobPosting.objects.get(id=preselected_job_id, user=request.user)
+        except JobPosting.DoesNotExist:
+            pass
+
     tone_presets = {
         'confident': {
             'label': 'Confident & Metric-Driven',
@@ -175,6 +185,7 @@ def tailoring_create(request):
 
     context = {
         'jobs': jobs,
+        'preselected_job': preselected_job,
         'default_parameters': default_parameters,
         'tone_presets': tone_presets,
         'default_sections_text': default_sections_text,

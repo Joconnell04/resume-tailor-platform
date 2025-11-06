@@ -52,6 +52,7 @@ class TailoringSession(models.Model):
     # AI runtime metadata
     openai_run_id = models.CharField(max_length=255, blank=True)
     token_usage = models.JSONField(default=dict, blank=True)
+    output_metadata = models.JSONField(default=dict, blank=True)
     debug_log = models.TextField(blank=True)
     error_message = models.TextField(blank=True)
     

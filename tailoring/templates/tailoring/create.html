@@ -5,113 +5,566 @@
 
 {% block extra_css %}
 <style>
+/* Token Balance Display */
 .token-balance {
     display: inline-flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 1rem 1.5rem;
-    background: linear-gradient(135deg, rgba(74, 144, 226, 0.15), rgba(139, 92, 246, 0.15));
-    border: 2px solid rgba(74, 144, 226, 0.4);
-    border-radius: 10px;
-    font-size: 1.05rem;
+    gap: 0.75rem;
+    padding: 0.75rem 1.25rem;
+    background: linear-gradient(135deg, rgba(74, 144, 226, 0.12), rgba(139, 92, 246, 0.12));
+    border: 1px solid rgba(74, 144, 226, 0.3);
+    border-radius: 8px;
+    font-size: 0.95rem;
     font-weight: 500;
-    box-shadow: 0 2px 8px rgba(74, 144, 226, 0.2);
+}
+
+.token-balance-icon {
+    width: 18px;
+    height: 18px;
+    color: var(--accent-light);
 }
 
 .token-balance-value {
     color: var(--accent-light);
     font-weight: 700;
-    font-size: 1.25rem;
+    font-size: 1.1rem;
 }
 
-/* Form Controls Styling */
+/* Form Controls */
 .form-select,
-.form-input {
-    padding: 1rem 1.25rem;
-    font-size: 1.05rem;
+.form-input,
+.form-textarea {
+    padding: 0.875rem 1.125rem;
+    font-size: 0.95rem;
     border-radius: 8px;
-    border: 2px solid rgba(74, 144, 226, 0.3);
+    border: 1px solid rgba(74, 144, 226, 0.25);
     background: rgba(26, 35, 50, 0.4);
     color: var(--text-primary);
     transition: all 0.2s ease;
     width: 100%;
+    font-family: inherit;
 }
 
 .form-select:hover,
-.form-input:hover {
-    border-color: rgba(74, 144, 226, 0.5);
+.form-input:hover,
+.form-textarea:hover {
+    border-color: rgba(74, 144, 226, 0.4);
 }
 
 .form-select:focus,
-.form-input:focus {
+.form-input:focus,
+.form-textarea:focus {
     outline: none;
     border-color: var(--accent-blue);
-    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.08);
 }
 
-.btn {
-    padding: 0.875rem 1.75rem;
-    font-size: 1.05rem;
+.form-textarea {
+    min-height: 100px;
+    resize: vertical;
+    line-height: 1.6;
+}
+
+/* Form Groups */
+.form-group {
+    margin-bottom: 2rem;
+}
+
+.form-label {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+    color: var(--text-primary);
+    font-size: 1rem;
+}
+
+.form-label-icon {
+    width: 20px;
+    height: 20px;
+    color: var(--accent-blue);
+}
+
+.form-hint {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.625rem;
+    margin-bottom: 0.875rem;
+    padding: 0.75rem 1rem;
+    background: rgba(74, 144, 226, 0.06);
+    border-left: 3px solid rgba(74, 144, 226, 0.4);
+    border-radius: 4px;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.form-hint-icon {
+    width: 16px;
+    height: 16px;
+    color: var(--accent-blue);
+    flex-shrink: 0;
+    margin-top: 0.125rem;
+}
+
+/* Sections Configuration */
+.sections-config {
+    padding: 1.5rem;
+    background: rgba(26, 35, 50, 0.3);
+    border: 1px solid rgba(74, 144, 226, 0.2);
+    border-radius: 10px;
+}
+
+.sections-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.section-category {
+    background: rgba(26, 35, 50, 0.5);
+    border: 1px solid rgba(74, 144, 226, 0.15);
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+.category-title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--accent-light);
+    margin-bottom: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.category-icon {
+    width: 14px;
+    height: 14px;
+}
+
+.section-option {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.5rem 0.75rem;
+    margin: 0.375rem 0;
+    background: rgba(26, 35, 50, 0.6);
+    border: 1px solid rgba(74, 144, 226, 0.2);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 0.875rem;
+}
+
+.section-option:hover {
+    background: rgba(74, 144, 226, 0.12);
+    border-color: rgba(74, 144, 226, 0.4);
+    transform: translateX(2px);
+}
+
+.section-option input[type="checkbox"] {
+    width: 17px;
+    height: 17px;
+    cursor: pointer;
+    accent-color: var(--accent-blue);
+    flex-shrink: 0;
+}
+
+.section-option input[type="checkbox"]:checked ~ span {
+    color: var(--accent-light);
+    font-weight: 600;
+}
+
+/* Custom Section Input */
+.custom-section-row {
+    display: flex;
+    gap: 0.75rem;
+    padding-top: 1rem;
+    border-top: 1px solid rgba(74, 144, 226, 0.15);
+}
+
+.custom-section-row input {
+    flex: 1;
+}
+
+.btn-add {
+    padding: 0.875rem 1.5rem;
+    background: rgba(74, 144, 226, 0.15);
+    border: 1px solid rgba(74, 144, 226, 0.3);
+    color: var(--accent-light);
     border-radius: 8px;
     font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
     transition: all 0.2s ease;
 }
 
-.btn-primary {
-    padding: 1rem 2rem;
-    font-size: 1.1rem;
+.btn-add:hover {
+    background: rgba(74, 144, 226, 0.25);
+    border-color: rgba(74, 144, 226, 0.5);
+    transform: translateY(-1px);
 }
 
-.advanced-settings {
+/* Selected Sections (Drag & Drop) */
+.selected-sections {
+    margin-top: 1.25rem;
+    padding: 1.25rem;
+    background: rgba(10, 15, 28, 0.4);
+    border: 2px dashed rgba(74, 144, 226, 0.3);
+    border-radius: 8px;
+    min-height: 100px;
+}
+
+.selected-header {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--accent-light);
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.selected-header-icon {
+    width: 16px;
+    height: 16px;
+}
+
+.selected-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+    min-height: 50px;
+}
+
+.selected-empty {
+    text-align: center;
+    padding: 2rem 1rem;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.selected-item {
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+    padding: 0.875rem 1.125rem;
+    background: linear-gradient(135deg, rgba(74, 144, 226, 0.12), rgba(139, 92, 246, 0.08));
+    border: 1px solid rgba(74, 144, 226, 0.3);
+    border-radius: 8px;
+    cursor: move;
+    transition: all 0.2s ease;
+}
+
+.selected-item:hover {
+    background: linear-gradient(135deg, rgba(74, 144, 226, 0.18), rgba(139, 92, 246, 0.12));
+    border-color: rgba(74, 144, 226, 0.5);
+    transform: translateX(2px);
+    box-shadow: 0 2px 8px rgba(74, 144, 226, 0.2);
+}
+
+.selected-item.dragging {
+    opacity: 0.4;
+}
+
+.selected-item.drag-over {
+    border-top: 2px solid var(--accent-blue);
+}
+
+.drag-handle {
+    width: 20px;
+    height: 20px;
+    color: var(--accent-blue);
+    cursor: grab;
+    flex-shrink: 0;
+}
+
+.drag-handle:active {
+    cursor: grabbing;
+}
+
+.item-number {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: var(--accent-blue);
+    color: white;
+    border-radius: 50%;
+    font-weight: 700;
+    font-size: 0.875rem;
+    flex-shrink: 0;
+}
+
+.item-text {
+    flex: 1;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.item-remove {
+    padding: 0.375rem 0.75rem;
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #ef4444;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 0.825rem;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.item-remove:hover {
+    background: rgba(239, 68, 68, 0.25);
+    transform: scale(1.05);
+}
+
+/* Configuration Panel */
+.config-panel {
+    display: grid;
+    grid-template-columns: 180px 1fr;
+    gap: 1.5rem;
+    padding: 1.25rem;
+    background: rgba(26, 35, 50, 0.3);
+    border: 1px solid rgba(74, 144, 226, 0.2);
+    border-radius: 10px;
+}
+
+/* Bullets Control */
+.bullets-control {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    background: rgba(26, 35, 50, 0.6);
+    border: 1px solid rgba(139, 92, 246, 0.25);
+    border-radius: 8px;
+}
+
+.bullets-display {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 52px;
+    background: linear-gradient(135deg, #8B5CF6, #a78bfa);
+    border-radius: 50%;
+    font-weight: 700;
+    font-size: 1.4rem;
+    color: white;
+    box-shadow: 0 2px 10px rgba(139, 92, 246, 0.4);
+}
+
+.bullets-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #a78bfa;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.bullets-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 6px;
+    background: rgba(139, 92, 246, 0.25);
+    border-radius: 3px;
+    outline: none;
+    cursor: pointer;
+}
+
+.bullets-slider::-webkit-slider-track {
+    width: 100%;
+    height: 6px;
+    background: linear-gradient(to right, rgba(139, 92, 246, 0.3), rgba(139, 92, 246, 0.6));
+    border-radius: 3px;
+}
+
+.bullets-slider::-moz-range-track {
+    width: 100%;
+    height: 6px;
+    background: linear-gradient(to right, rgba(139, 92, 246, 0.3), rgba(139, 92, 246, 0.6));
+    border-radius: 3px;
+}
+
+.bullets-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 20px;
+    height: 20px;
+    background: linear-gradient(135deg, #a78bfa, #8B5CF6);
+    border: 2px solid #1a2332;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(139, 92, 246, 0.5);
+    margin-top: -7px;
+}
+
+.bullets-slider::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    background: linear-gradient(135deg, #a78bfa, #8B5CF6);
+    border: 2px solid #1a2332;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(139, 92, 246, 0.5);
+}
+
+.slider-range {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    font-size: 0.75rem;
+    color: #a78bfa;
+    font-weight: 700;
+}
+
+/* Options Grid */
+.options-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.options-row {
+    display: flex;
+    gap: 1rem;
+}
+
+.option-box {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.75rem 1rem;
+    background: rgba(26, 35, 50, 0.5);
+    border: 1px solid rgba(74, 144, 226, 0.25);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.option-box:hover {
+    background: rgba(74, 144, 226, 0.1);
+    border-color: rgba(74, 144, 226, 0.4);
+    transform: translateY(-1px);
+}
+
+.option-box input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: var(--accent-blue);
+}
+
+.option-box input[type="checkbox"]:checked ~ .option-text {
+    color: var(--accent-light);
+    font-weight: 600;
+}
+
+.option-icon {
+    width: 18px;
+    height: 18px;
+    color: var(--accent-blue);
+}
+
+.option-text {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    transition: all 0.2s ease;
+}
+
+.tone-selector {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.tone-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--accent-light);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.tone-label-icon {
+    width: 16px;
+    height: 16px;
+}
+
+.tone-custom {
+    display: none;
+    margin-top: 0.5rem;
+}
+
+/* Advanced Settings */
+.advanced-section {
     margin-top: 2rem;
-    border-top: 2px solid rgba(74, 144, 226, 0.2);
     padding-top: 1.5rem;
+    border-top: 1px solid rgba(74, 144, 226, 0.15);
 }
 
 .advanced-toggle {
     display: flex;
     align-items: center;
     gap: 0.75rem;
+    padding: 0.875rem 1.125rem;
+    background: rgba(26, 35, 50, 0.3);
+    border: 1px solid rgba(74, 144, 226, 0.2);
+    border-radius: 8px;
     cursor: pointer;
-    padding: 1.25rem 1.5rem;
-    background: linear-gradient(135deg, rgba(26, 35, 50, 0.6), rgba(26, 35, 50, 0.4));
-    border: 2px solid rgba(74, 144, 226, 0.3);
-    border-radius: 10px;
-    transition: all 0.3s ease;
+    transition: all 0.2s ease;
     -webkit-user-select: none;
     user-select: none;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
 }
 
 .advanced-toggle:hover {
-    border-color: var(--accent-blue);
-    background: linear-gradient(135deg, rgba(74, 144, 226, 0.15), rgba(139, 92, 246, 0.1));
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(74, 144, 226, 0.2);
+    border-color: rgba(74, 144, 226, 0.4);
+    background: rgba(74, 144, 226, 0.08);
 }
 
-.advanced-toggle-icon {
-    transition: transform 0.3s ease;
+.toggle-icon {
+    width: 12px;
+    height: 12px;
     color: var(--accent-blue);
-    font-weight: bold;
+    transition: transform 0.2s ease;
 }
 
-.advanced-toggle.active .advanced-toggle-icon {
+.advanced-toggle.active .toggle-icon {
     transform: rotate(90deg);
+}
+
+.toggle-label {
+    flex: 1;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 0.95rem;
+}
+
+.toggle-hint {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
 }
 
 .advanced-content {
     display: none;
-    margin-top: 1rem;
-    padding: 1rem;
-    background: rgba(26, 35, 50, 0.3);
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
+    margin-top: 1.25rem;
 }
 
 .advanced-content.active {
     display: block;
-    animation: slideDown 0.3s ease;
+    animation: slideDown 0.2s ease;
 }
 
 @keyframes slideDown {
@@ -125,443 +578,250 @@
     }
 }
 
-.slider-container {
-    margin-top: 1rem;
+.advanced-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.25rem;
     padding: 1.25rem;
-    background: rgba(26, 35, 50, 0.3);
-    border-radius: 10px;
-    border: 1px solid rgba(74, 144, 226, 0.2);
-}
-
-.slider-visual {
-    position: relative;
-    height: 12px;
-    background: rgba(26, 35, 50, 0.6);
+    background: rgba(26, 35, 50, 0.25);
+    border: 1px solid rgba(74, 144, 226, 0.15);
     border-radius: 8px;
-    overflow: hidden;
-    border: 1px solid rgba(74, 144, 226, 0.2);
 }
 
-.slider-fill {
-    height: 100%;
-    background: linear-gradient(90deg, #4A90E2, #8B5CF6, #10B981);
-    border-radius: 8px;
-    transition: width 0.2s ease;
-    box-shadow: 0 0 10px rgba(74, 144, 226, 0.4);
-}
-
-.slider-labels {
+.param-box {
     display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+}
+
+.param-header {
+    display: flex;
+    align-items: center;
     justify-content: space-between;
-    margin-top: 0.75rem;
-    font-size: 0.95rem;
-    color: var(--text-secondary);
-    font-weight: 500;
 }
 
-.slider-value {
-    display: inline-block;
-    min-width: 4rem;
-    text-align: center;
-    padding: 0.5rem 1rem;
-    background: linear-gradient(135deg, var(--accent-blue), var(--accent-light));
-    color: white;
-    border-radius: 8px;
-    font-size: 1.1rem;
+.param-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.param-icon {
+    width: 16px;
+    height: 16px;
+    color: var(--accent-blue);
+}
+
+.param-value {
+    padding: 0.25rem 0.75rem;
+    background: rgba(74, 144, 226, 0.15);
+    border: 1px solid rgba(74, 144, 226, 0.3);
+    border-radius: 6px;
     font-weight: 700;
-    margin-left: 1rem;
-    box-shadow: 0 2px 8px rgba(74, 144, 226, 0.3);
+    font-size: 0.85rem;
+    color: var(--accent-light);
 }
 
-input[type="range"] {
+.param-desc {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.param-slider {
     -webkit-appearance: none;
     appearance: none;
     width: 100%;
-    height: 12px;
-    background: transparent;
+    height: 5px;
+    background: rgba(74, 144, 226, 0.2);
+    border-radius: 3px;
     outline: none;
-    margin: 0.75rem 0;
+    cursor: pointer;
 }
 
-input[type="range"]::-webkit-slider-thumb {
+.param-slider::-webkit-slider-track {
+    width: 100%;
+    height: 5px;
+    background: linear-gradient(to right, rgba(74, 144, 226, 0.25), rgba(139, 92, 246, 0.4));
+    border-radius: 3px;
+}
+
+.param-slider::-moz-range-track {
+    width: 100%;
+    height: 5px;
+    background: linear-gradient(to right, rgba(74, 144, 226, 0.25), rgba(139, 92, 246, 0.4));
+    border-radius: 3px;
+}
+
+.param-slider::-webkit-slider-thumb {
     -webkit-appearance: none;
-    appearance: none;
-    width: 28px;
-    height: 28px;
-    background: var(--accent-light);
-    cursor: pointer;
+    width: 16px;
+    height: 16px;
+    background: linear-gradient(135deg, #4a90e2, #8B5CF6);
+    border: 2px solid #1a2332;
     border-radius: 50%;
-    border: 4px solid var(--bg-secondary);
-    box-shadow: 0 3px 10px rgba(74, 144, 226, 0.5);
-    transition: all 0.2s ease;
-}
-
-input[type="range"]::-webkit-slider-thumb:hover {
-    background: var(--accent-blue);
-    transform: scale(1.15);
-    box-shadow: 0 4px 14px rgba(74, 144, 226, 0.7);
-}
-
-input[type="range"]::-moz-range-thumb {
-    width: 28px;
-    height: 28px;
-    background: var(--accent-light);
     cursor: pointer;
+    box-shadow: 0 2px 6px rgba(74, 144, 226, 0.4);
+    margin-top: -5.5px;
+}
+
+.param-slider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    background: linear-gradient(135deg, #4a90e2, #8B5CF6);
+    border: 2px solid #1a2332;
     border-radius: 50%;
-    border: 4px solid var(--bg-secondary);
-    box-shadow: 0 3px 10px rgba(74, 144, 226, 0.5);
-    transition: all 0.2s ease;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(74, 144, 226, 0.4);
 }
 
-input[type="range"]::-moz-range-thumb:hover {
-    background: var(--accent-blue);
-    transform: scale(1.15);
-    box-shadow: 0 4px 14px rgba(74, 144, 226, 0.7);
-}
-
-.form-help {
+.param-ticks {
     display: flex;
-    align-items: flex-start;
-    gap: 0.75rem;
-    margin-top: 0.75rem;
-    padding: 0.75rem 1rem;
-    background: linear-gradient(135deg, rgba(74, 144, 226, 0.08), rgba(139, 92, 246, 0.05));
-    border-left: 4px solid var(--accent-blue);
-    border-radius: 6px;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
-}
-
-.form-help-icon {
-    color: var(--accent-blue);
-    font-weight: bold;
-    flex-shrink: 0;
-    font-size: 1.1rem;
-}
-
-.form-help-text {
-    font-size: 0.875rem;
-    color: var(--text-secondary);
-    line-height: 1.6;
-}
-
-.estimated-cost {
-    margin-top: 1.5rem;
-    padding: 1.25rem;
-    background: linear-gradient(135deg, rgba(74, 144, 226, 0.12), rgba(139, 92, 246, 0.08));
-    border: 2px solid rgba(74, 144, 226, 0.3);
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(74, 144, 226, 0.15);
-}
-
-.estimated-cost-label {
-    font-size: 0.9rem;
-    color: var(--text-secondary);
-    margin-bottom: 0.5rem;
+    justify-content: space-between;
+    margin-top: 0.375rem;
+    font-size: 0.7rem;
+    color: var(--text-muted);
     font-weight: 500;
-}
-
-.estimated-cost-value {
-    font-size: 1.4rem;
-    color: var(--accent-light);
-    font-weight: 700;
-    text-shadow: 0 0 10px rgba(74, 144, 226, 0.3);
-}
-
-.form-group {
-    margin-bottom: 2rem;
-}
-
-.form-label {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-weight: 600;
-    margin-bottom: 1rem;
-    color: var(--text-primary);
-    font-size: 1.1rem;
-}
-
-.checkbox-group {
-    display: flex;
-    flex-direction: column;
-    gap: 0.875rem;
-}
-
-.form-checkbox {
-    display: flex;
-    align-items: center;
-    gap: 0.875rem;
-    padding: 0.875rem 1.125rem;
-    background: rgba(26, 35, 50, 0.3);
-    border: 1px solid rgba(74, 144, 226, 0.2);
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.form-checkbox:hover {
-    background: rgba(74, 144, 226, 0.1);
-    border-color: rgba(74, 144, 226, 0.4);
-}
-
-.form-checkbox input[type="checkbox"] {
-    width: 22px;
-    height: 22px;
-    cursor: pointer;
-    accent-color: var(--accent-blue);
-}
-
-.form-checkbox span {
-    font-size: 1.05rem;
-}
-
-.advanced-toggle-label {
-    flex: 1;
-    font-weight: 500;
-}
-
-.advanced-toggle-subtitle {
-    font-size: 0.85rem;
-}
-
-.tone-custom-input {
-    display: none;
-}
-
-.card {
-    animation: fadeIn 0.4s ease;
-}
-
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-/* Sections Selector */
-.sections-selector {
-    padding: 1.5rem;
-    background: linear-gradient(135deg, rgba(26, 35, 50, 0.5), rgba(26, 35, 50, 0.3));
-    border: 2px solid rgba(74, 144, 226, 0.3);
-    border-radius: 12px;
-}
-
-.sections-categories {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 1.5rem;
-    margin-bottom: 1.5rem;
-}
-
-.section-category {
-    background: rgba(26, 35, 50, 0.4);
-    border: 1px solid rgba(74, 144, 226, 0.2);
-    border-radius: 8px;
-    padding: 1.25rem;
-    transition: all 0.3s ease;
-}
-
-.section-category:hover {
-    border-color: rgba(74, 144, 226, 0.5);
-    background: rgba(74, 144, 226, 0.08);
-}
-
-.category-header {
-    font-size: 1.05rem;
-    font-weight: 600;
-    color: var(--accent-light);
-    margin-bottom: 1rem;
-    padding-bottom: 0.75rem;
-    border-bottom: 2px solid rgba(74, 144, 226, 0.3);
-}
-
-.category-items {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-}
-
-.section-item {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    padding: 0.75rem 1rem;
-    background: rgba(26, 35, 50, 0.3);
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    font-size: 1rem;
-    border: 1px solid transparent;
-}
-
-.section-item:hover {
-    background: rgba(74, 144, 226, 0.15);
-    border-color: rgba(74, 144, 226, 0.3);
-    transform: translateX(4px);
-}
-
-.section-item input[type="checkbox"] {
-    width: 22px;
-    height: 22px;
-    cursor: pointer;
-    accent-color: var(--accent-blue);
-}
-
-.section-item input[type="checkbox"]:checked + span {
-    color: var(--accent-light);
-    font-weight: 600;
-}
-
-/* Selected Sections (Drag and Drop) */
-.selected-sections-container {
-    margin: 1.5rem 0;
-    padding: 1.25rem;
-    background: rgba(74, 144, 226, 0.05);
-    border: 2px dashed rgba(74, 144, 226, 0.3);
-    border-radius: 8px;
-    min-height: 100px;
-}
-
-.selected-sections-header {
-    font-size: 1.05rem;
-    font-weight: 600;
-    color: var(--accent-light);
-    margin-bottom: 1rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.selected-sections-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-    min-height: 50px;
-}
-
-.selected-section-item {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    padding: 1rem 1.25rem;
-    background: linear-gradient(135deg, rgba(74, 144, 226, 0.15), rgba(139, 92, 246, 0.1));
-    border: 1px solid rgba(74, 144, 226, 0.4);
-    border-radius: 8px;
-    cursor: move;
-    transition: all 0.2s ease;
-    font-size: 1.05rem;
-    font-weight: 500;
-}
-
-.selected-section-item:hover {
-    background: linear-gradient(135deg, rgba(74, 144, 226, 0.25), rgba(139, 92, 246, 0.15));
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(74, 144, 226, 0.3);
-}
-
-.selected-section-item.dragging {
-    opacity: 0.5;
-    transform: scale(0.98);
-}
-
-.selected-section-item.drag-over {
-    border-top: 3px solid var(--accent-blue);
-    margin-top: 0.5rem;
-}
-
-.drag-handle {
-    color: var(--accent-light);
-    font-size: 1.25rem;
-    cursor: grab;
-}
-
-.drag-handle:active {
-    cursor: grabbing;
-}
-
-.section-order-number {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    background: var(--accent-blue);
-    color: white;
-    border-radius: 50%;
-    font-weight: 700;
-    font-size: 0.95rem;
-}
-
-.remove-section-btn {
-    margin-left: auto;
-    padding: 0.5rem 0.75rem;
-    background: rgba(239, 68, 68, 0.2);
-    border: 1px solid rgba(239, 68, 68, 0.4);
-    color: #ef4444;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    font-weight: 600;
-}
-
-.remove-section-btn:hover {
-    background: rgba(239, 68, 68, 0.3);
-    transform: scale(1.05);
-}
-
-.custom-section-input {
-    display: flex;
-    gap: 1rem;
-    padding-top: 1.25rem;
-    border-top: 2px solid rgba(74, 144, 226, 0.2);
-}
-
-.custom-section-input input {
-    flex: 1;
-    padding: 0.875rem 1.25rem;
-    font-size: 1rem;
 }
 
 .custom-instructions {
-    margin-top: 1.5rem;
-    padding-top: 1.5rem;
-    border-top: 2px solid rgba(74, 144, 226, 0.2);
+    grid-column: 1 / -1;
+    margin-top: 0.75rem;
+    padding-top: 1rem;
+    border-top: 1px solid rgba(74, 144, 226, 0.1);
 }
 
-.custom-instructions textarea {
-    width: 100%;
-    min-height: 120px;
-    padding: 1rem 1.25rem;
-    background: rgba(26, 35, 50, 0.4);
-    border: 1px solid rgba(74, 144, 226, 0.3);
-    border-radius: 8px;
+.instructions-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 600;
     color: var(--text-primary);
-    font-size: 1rem;
-    line-height: 1.6;
-    resize: vertical;
-    font-family: inherit;
 }
 
-.custom-instructions textarea:focus {
-    outline: none;
-    border-color: var(--accent-blue);
-    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+.instructions-optional {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 400;
+    font-style: italic;
 }
 
-.btn-secondary {
-    padding: 0.75rem 1.5rem;
-    font-size: 1rem;
-    background: linear-gradient(135deg, rgba(74, 144, 226, 0.3), rgba(139, 92, 246, 0.3));
-    border: 1px solid rgba(74, 144, 226, 0.5);
+.cost-estimate {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.625rem;
+    margin-top: 1rem;
+    padding: 0.625rem 1rem;
+    background: rgba(74, 144, 226, 0.06);
+    border: 1px solid rgba(74, 144, 226, 0.2);
+    border-radius: 6px;
+    font-size: 0.85rem;
 }
 
-.btn-secondary:hover {
-    background: linear-gradient(135deg, rgba(74, 144, 226, 0.5), rgba(139, 92, 246, 0.5));
+.cost-icon {
+    width: 16px;
+    height: 16px;
+    color: var(--accent-blue);
+}
+
+.cost-label {
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.cost-value {
+    color: var(--accent-light);
+    font-weight: 700;
+}
+
+/* Form Actions */
+.form-actions {
+    margin-top: 2.5rem;
+    padding-top: 2rem;
+    border-top: 1px solid rgba(74, 144, 226, 0.15);
+    display: flex;
+    gap: 1rem;
+}
+
+.btn-submit {
+    padding: 1rem 2rem;
+    background: linear-gradient(135deg, #4a90e2, #8B5CF6);
+    border: none;
+    color: white;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 1.05rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 10px rgba(74, 144, 226, 0.3);
+}
+
+.btn-submit:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(74, 144, 226, 0.4);
+}
+
+.btn-cancel {
+    padding: 1rem 2rem;
+    background: rgba(74, 144, 226, 0.08);
+    border: 1px solid rgba(74, 144, 226, 0.2);
+    color: var(--text-primary);
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 1.05rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    display: inline-block;
+}
+
+.btn-cancel:hover {
+    background: rgba(74, 144, 226, 0.12);
+    border-color: rgba(74, 144, 226, 0.3);
+}
+
+/* Empty State */
+.empty-state {
+    text-align: center;
+    padding: 3rem 2rem;
+}
+
+.empty-icon {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 1.5rem;
+    color: var(--text-muted);
+}
+
+.empty-text {
+    font-size: 1.1rem;
+    color: var(--text-secondary);
+    margin-bottom: 1.5rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .config-panel {
+        grid-template-columns: 1fr;
+    }
+
+    .advanced-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .sections-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .options-row {
+        flex-direction: column;
+    }
 }
 </style>
 {% endblock %}
@@ -571,7 +831,11 @@ input[type="range"]::-moz-range-thumb:hover {
     <div class="page-header">
         <h1 class="page-title">Create Tailoring Session</h1>
         <div class="token-balance">
-            <span>💎 Tokens Available:</span>
+            <svg class="token-balance-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"></path>
+                <path d="M12 18V6"></path>
+            </svg>
             <span class="token-balance-value">{{ user.tokens_available|default:0|format_number }}</span>
         </div>
     </div>
@@ -581,231 +845,337 @@ input[type="range"]::-moz-range-thumb:hover {
             {% if jobs %}
             <form method="post">
                 {% csrf_token %}
-                
+
+                <!-- Job Selection -->
                 <div class="form-group">
-                    <label class="form-label" for="job_id">Select Job *</label>
+                    <label class="form-label" for="job_id">
+                        <svg class="form-label-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+                            <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+                        </svg>
+                        Job Position
+                    </label>
+                    <div class="form-hint">
+                        <svg class="form-hint-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="16" x2="12" y2="12"></line>
+                            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                        </svg>
+                        <span>Choose the job posting to tailor your resume for. Requirements will be matched against your experience.</span>
+                    </div>
                     <select name="job_id" id="job_id" class="form-select" required>
-                        <option value="">-- Choose a job --</option>
+                        <option value="">Select a job position</option>
                         {% for job in jobs %}
-                        <option value="{{ job.id }}">{{ job.title }} at {{ job.company }}</option>
+                        <option value="{{ job.id }}" {% if preselected_job and preselected_job.id == job.id %}selected{% endif %}>{{ job.title }} at {{ job.company }}</option>
                         {% endfor %}
                     </select>
-                    <div class="form-help">
-                        <span class="form-help-icon">💡</span>
-                        <span class="form-help-text">Select the job posting you want to tailor your resume for. The AI will analyze the requirements and match them to your experience.</span>
-                    </div>
                 </div>
 
+                <!-- Resume Sections -->
                 <div class="form-group">
-                    <label class="form-label" for="sections">📝 Resume Sections</label>
-                    <div class="sections-selector">
-                        <div class="sections-categories">
+                    <label class="form-label" for="sections">
+                        <svg class="form-label-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="8" y1="6" x2="21" y2="6"></line>
+                            <line x1="8" y1="12" x2="21" y2="12"></line>
+                            <line x1="8" y1="18" x2="21" y2="18"></line>
+                            <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                            <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                            <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                        </svg>
+                        Resume Sections
+                    </label>
+                    <div class="form-hint">
+                        <svg class="form-hint-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="16" x2="12" y2="12"></line>
+                            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                        </svg>
+                        <span>Select sections to include. Drag items below to reorder appearance.</span>
+                    </div>
+                    <div class="sections-config">
+                        <div class="sections-grid">
                             <div class="section-category">
-                                <div class="category-header">💼 Professional Experience</div>
-                                <div class="category-items">
-                                    <label class="section-item">
-                                        <input type="checkbox" name="section_check" value="Professional Highlights" checked>
-                                        <span>Professional Highlights</span>
-                                    </label>
-                                    <label class="section-item">
-                                        <input type="checkbox" name="section_check" value="Career Achievements">
-                                        <span>Career Achievements</span>
-                                    </label>
-                                    <label class="section-item">
-                                        <input type="checkbox" name="section_check" value="Work Experience">
-                                        <span>Work Experience</span>
-                                    </label>
+                                <div class="category-title">
+                                    <svg class="category-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+                                        <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+                                    </svg>
+                                    Professional
                                 </div>
+                                <label class="section-option">
+                                    <input type="checkbox" name="section_check" value="Professional Highlights" checked>
+                                    <span>Professional Highlights</span>
+                                </label>
+                                <label class="section-option">
+                                    <input type="checkbox" name="section_check" value="Career Achievements">
+                                    <span>Career Achievements</span>
+                                </label>
+                                <label class="section-option">
+                                    <input type="checkbox" name="section_check" value="Work Experience">
+                                    <span>Work Experience</span>
+                                </label>
                             </div>
-                            
+
                             <div class="section-category">
-                                <div class="category-header">🎯 Leadership & Impact</div>
-                                <div class="category-items">
-                                    <label class="section-item">
-                                        <input type="checkbox" name="section_check" value="Leadership Impact">
-                                        <span>Leadership Impact</span>
-                                    </label>
-                                    <label class="section-item">
-                                        <input type="checkbox" name="section_check" value="Strategic Initiatives">
-                                        <span>Strategic Initiatives</span>
-                                    </label>
-                                    <label class="section-item">
-                                        <input type="checkbox" name="section_check" value="Team Leadership">
-                                        <span>Team Leadership</span>
-                                    </label>
+                                <div class="category-title">
+                                    <svg class="category-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                        <circle cx="9" cy="7" r="4"></circle>
+                                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                                    </svg>
+                                    Leadership
                                 </div>
+                                <label class="section-option">
+                                    <input type="checkbox" name="section_check" value="Leadership Impact">
+                                    <span>Leadership Impact</span>
+                                </label>
+                                <label class="section-option">
+                                    <input type="checkbox" name="section_check" value="Strategic Initiatives">
+                                    <span>Strategic Initiatives</span>
+                                </label>
+                                <label class="section-option">
+                                    <input type="checkbox" name="section_check" value="Team Leadership">
+                                    <span>Team Leadership</span>
+                                </label>
                             </div>
-                            
+
                             <div class="section-category">
-                                <div class="category-header">🔧 Technical & Skills</div>
-                                <div class="category-items">
-                                    <label class="section-item">
-                                        <input type="checkbox" name="section_check" value="Technical Expertise">
-                                        <span>Technical Expertise</span>
-                                    </label>
-                                    <label class="section-item">
-                                        <input type="checkbox" name="section_check" value="Core Competencies">
-                                        <span>Core Competencies</span>
-                                    </label>
-                                    <label class="section-item">
-                                        <input type="checkbox" name="section_check" value="Key Skills">
-                                        <span>Key Skills</span>
-                                    </label>
+                                <div class="category-title">
+                                    <svg class="category-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="16 18 22 12 16 6"></polyline>
+                                        <polyline points="8 6 2 12 8 18"></polyline>
+                                    </svg>
+                                    Technical
                                 </div>
+                                <label class="section-option">
+                                    <input type="checkbox" name="section_check" value="Technical Expertise">
+                                    <span>Technical Expertise</span>
+                                </label>
+                                <label class="section-option">
+                                    <input type="checkbox" name="section_check" value="Core Competencies">
+                                    <span>Core Competencies</span>
+                                </label>
+                                <label class="section-option">
+                                    <input type="checkbox" name="section_check" value="Key Skills">
+                                    <span>Key Skills</span>
+                                </label>
                             </div>
-                            
+
                             <div class="section-category">
-                                <div class="category-header">📚 Education & Certifications</div>
-                                <div class="category-items">
-                                    <label class="section-item">
-                                        <input type="checkbox" name="section_check" value="Education Background">
-                                        <span>Education Background</span>
-                                    </label>
-                                    <label class="section-item">
-                                        <input type="checkbox" name="section_check" value="Certifications">
-                                        <span>Certifications</span>
-                                    </label>
-                                    <label class="section-item">
-                                        <input type="checkbox" name="section_check" value="Professional Development">
-                                        <span>Professional Development</span>
-                                    </label>
+                                <div class="category-title">
+                                    <svg class="category-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                                        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                                    </svg>
+                                    Education
                                 </div>
+                                <label class="section-option">
+                                    <input type="checkbox" name="section_check" value="Education Background">
+                                    <span>Education Background</span>
+                                </label>
+                                <label class="section-option">
+                                    <input type="checkbox" name="section_check" value="Certifications">
+                                    <span>Certifications</span>
+                                </label>
+                                <label class="section-option">
+                                    <input type="checkbox" name="section_check" value="Professional Development">
+                                    <span>Professional Development</span>
+                                </label>
                             </div>
                         </div>
-                        
-                        <div class="custom-section-input">
-                            <input type="text" id="custom-section" class="form-input" placeholder="+ Add custom section name">
-                            <button type="button" id="add-custom-section" class="btn btn-small btn-secondary">Add</button>
+
+                        <div class="custom-section-row">
+                            <input type="text" id="custom-section" class="form-input" placeholder="Add custom section">
+                            <button type="button" id="add-custom-section" class="btn-add">Add Section</button>
                         </div>
-                        
-                        <div class="selected-sections-container">
-                            <div class="selected-sections-header">
-                                <span>📋 Selected Sections (Drag to Reorder)</span>
+
+                        <div class="selected-sections">
+                            <div class="selected-header">
+                                <svg class="selected-header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="9 11 12 14 22 4"></polyline>
+                                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                                </svg>
+                                Selected Sections
                             </div>
-                            <div class="selected-sections-list" id="selected-sections-list">
-                                <!-- Dynamically populated -->
-                            </div>
-                        </div>
-                        
-                        <div class="custom-instructions">
-                            <label class="form-label" for="section_instructions">
-                                💬 Custom Instructions (Optional)
-                            </label>
-                            <textarea name="section_instructions" id="section_instructions" placeholder="Add any specific instructions for the AI about your resume sections. For example: 'Focus on leadership experiences in Professional Highlights' or 'Emphasize Python and cloud technologies in Technical Expertise'. This guides the AI without overriding ATS optimization logic."></textarea>
-                            <div class="form-help mt-1">
-                                <span class="form-help-icon">🎯</span>
-                                <span class="form-help-text">These instructions guide the AI's content generation while maintaining ATS optimization. Be specific about what you want emphasized in each section.</span>
+                            <div class="selected-list" id="selected-list">
+                                <div class="selected-empty">Select sections above to begin</div>
                             </div>
                         </div>
-                        
+
                         <input type="hidden" name="sections" id="sections" value="">
                         <input type="hidden" name="sections_order" id="sections_order" value="">
                     </div>
-                    <div class="form-help">
-                        <span class="form-help-icon">📝</span>
-                        <span class="form-help-text">Select pre-defined sections or add your own custom section names. Drag and drop to arrange the order they'll appear in your resume.</span>
-                    </div>
                 </div>
 
+                <!-- Configuration Panel -->
                 <div class="form-group">
-                    <label class="form-label" for="bullets_per_section">
-                        Bullets Per Section
-                        <span class="slider-value" id="bullets-value">{{ default_parameters.bullets_per_section }}</span>
+                    <label class="form-label">
+                        <svg class="form-label-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path d="M12 1v6m0 6v6m-7-7h6m6 0h6"></path>
+                        </svg>
+                        Generation Configuration
                     </label>
-                    <input type="range" name="bullets_per_section" id="bullets_per_section" class="form-input" min="1" max="8" value="{{ default_parameters.bullets_per_section }}" oninput="document.getElementById('bullets-value').textContent = this.value">
-                    <div class="slider-labels">
-                        <span>1 (Concise)</span>
-                        <span>8 (Detailed)</span>
+                    <div class="form-hint">
+                        <svg class="form-hint-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="16" x2="12" y2="12"></line>
+                            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                        </svg>
+                        <span>Control output detail and style. More bullets generate more content.</span>
                     </div>
-                    <div class="form-help">
-                        <span class="form-help-icon">🎯</span>
-                        <span class="form-help-text">Controls how many achievement bullet points are generated per section. More bullets = more detail but uses more tokens.</span>
-                    </div>
-                </div>
+                    <div class="config-panel">
+                        <!-- Bullets Slider -->
+                        <div class="bullets-control">
+                            <div class="bullets-display" id="bullets-display">{{ default_parameters.bullets_per_section }}</div>
+                            <div class="bullets-label">Bullets</div>
+                            <input type="range" name="bullets_per_section" id="bullets-slider" class="bullets-slider" min="1" max="8" value="{{ default_parameters.bullets_per_section }}">
+                            <div class="slider-range">
+                                <span>1</span>
+                                <span>8</span>
+                            </div>
+                        </div>
 
-                <div class="form-group">
-                    <label class="form-label" for="tone_preset">Writing Tone</label>
-                    <select name="tone_preset" id="tone_preset" class="form-select">
-                        {% for key, preset in tone_presets.items %}
-                        <option value="{{ key }}">{{ preset.label }}</option>
-                        {% endfor %}
-                        <option value="custom">Custom tone...</option>
-                    </select>
-                    <input type="text" name="tone_custom" id="tone_custom" class="form-input mt-1 tone-custom-input" placeholder="Describe your preferred tone (e.g., 'formal and academic')">
-                    <div class="form-help">
-                        <span class="form-help-icon">✍️</span>
-                        <span class="form-help-text">Choose the writing style for your resume bullets. Confident & metric-driven works well for most tech roles.</span>
-                    </div>
-                </div>
+                        <!-- Options -->
+                        <div class="options-grid">
+                            <div class="options-row">
+                                <label class="option-box">
+                                    <input type="checkbox" name="include_summary" {% if default_parameters.include_summary %}checked{% endif %}>
+                                    <svg class="option-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                        <polyline points="14 2 14 8 20 8"></polyline>
+                                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                                        <polyline points="10 9 9 9 8 9"></polyline>
+                                    </svg>
+                                    <span class="option-text">Include Summary</span>
+                                </label>
+                                <label class="option-box">
+                                    <input type="checkbox" name="include_cover_letter">
+                                    <svg class="option-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                                        <polyline points="22,6 12,13 2,6"></polyline>
+                                    </svg>
+                                    <span class="option-text">Generate Cover Letter</span>
+                                </label>
+                            </div>
 
-                <div class="form-group checkbox-group">
-                    <label class="form-checkbox">
-                        <input type="checkbox" name="include_summary" {% if default_parameters.include_summary %}checked{% endif %}>
-                        <span>📄 Include professional summary paragraph</span>
-                    </label>
-                    <label class="form-checkbox mt-1">
-                        <input type="checkbox" name="include_cover_letter">
-                        <span>✉️ Generate brief cover letter (adds ~200 tokens)</span>
-                    </label>
+                            <div class="tone-selector">
+                                <label class="tone-label" for="tone-select">
+                                    <svg class="tone-label-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M12 19l7-7 3 3-7 7-3-3z"></path>
+                                        <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path>
+                                        <path d="M2 2l7.586 7.586"></path>
+                                        <circle cx="11" cy="11" r="2"></circle>
+                                    </svg>
+                                    Writing Tone
+                                </label>
+                                <select name="tone_preset" id="tone-select" class="form-select">
+                                    {% for key, preset in tone_presets.items %}
+                                    <option value="{{ key }}">{{ preset.label }}</option>
+                                    {% endfor %}
+                                    <option value="custom">Custom Tone</option>
+                                </select>
+                                <input type="text" name="tone_custom" id="tone-custom" class="form-input tone-custom" placeholder="Describe your preferred tone">
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Advanced Settings -->
-                <div class="advanced-settings">
+                <div class="advanced-section">
                     <div class="advanced-toggle" id="advanced-toggle">
-                        <span class="advanced-toggle-icon">▶</span>
-                        <span class="advanced-toggle-label">Advanced Settings</span>
-                        <span class="text-muted advanced-toggle-subtitle">Fine-tune AI parameters</span>
+                        <svg class="toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="9 18 15 12 9 6"></polyline>
+                        </svg>
+                        <span class="toggle-label">Advanced Settings</span>
+                        <span class="toggle-hint">Fine-tune generation parameters</span>
                     </div>
-                    
+
                     <div class="advanced-content" id="advanced-content">
-                        <div class="form-group">
-                            <label class="form-label" for="temperature">
-                                Creativity Level
-                                <span class="slider-value" id="temp-value">{{ default_parameters.temperature }}</span>
-                            </label>
-                            <input type="range" name="temperature" id="temperature" min="0" max="1" step="0.05" value="{{ default_parameters.temperature }}" oninput="document.getElementById('temp-value').textContent = parseFloat(this.value).toFixed(2)">
-                            <div class="slider-labels">
-                                <span>0.0 (Conservative)</span>
-                                <span>1.0 (Creative)</span>
+                        <div class="advanced-grid">
+                            <!-- Temperature -->
+                            <div class="param-box">
+                                <div class="param-header">
+                                    <div class="param-label">
+                                        <svg class="param-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"></path>
+                                        </svg>
+                                        <span>Creativity</span>
+                                    </div>
+                                    <span class="param-value" id="temp-value">{{ default_parameters.temperature }}</span>
+                                </div>
+                                <p class="param-desc">Lower values produce consistent output, higher values add variation</p>
+                                <input type="range" name="temperature" id="temp-slider" class="param-slider" min="0" max="1" step="0.05" value="{{ default_parameters.temperature }}">
+                                <div class="param-ticks">
+                                    <span>0.0</span>
+                                    <span>0.5</span>
+                                    <span>1.0</span>
+                                </div>
                             </div>
-                            <div class="form-help">
-                                <span class="form-help-icon">🎨</span>
-                                <span class="form-help-text">Lower values (0.2-0.4) produce consistent, professional language. Higher values (0.6-1.0) generate more varied, creative phrasing. Recommended: 0.35</span>
-                            </div>
-                        </div>
 
-                        <div class="form-group">
-                            <label class="form-label" for="max_output_tokens">
-                                Max Output Tokens
-                                <span class="slider-value" id="tokens-value">{{ default_parameters.max_output_tokens }}</span>
-                            </label>
-                            <input type="range" name="max_output_tokens" id="max_output_tokens" class="form-input" min="200" max="2000" step="100" value="{{ default_parameters.max_output_tokens }}" oninput="document.getElementById('tokens-value').textContent = this.value">
-                            <div class="slider-labels">
-                                <span>200 (Brief)</span>
-                                <span>2000 (Comprehensive)</span>
+                            <!-- Max Tokens -->
+                            <div class="param-box">
+                                <div class="param-header">
+                                    <div class="param-label">
+                                        <svg class="param-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <circle cx="12" cy="12" r="10"></circle>
+                                            <polyline points="12 6 12 12 16 14"></polyline>
+                                        </svg>
+                                        <span>Max Tokens</span>
+                                    </div>
+                                    <span class="param-value" id="tokens-value">{{ default_parameters.max_output_tokens|format_number }}</span>
+                                </div>
+                                <p class="param-desc">Maximum response length. Higher values allow more detailed output</p>
+                                <input type="range" name="max_output_tokens" id="tokens-slider" class="param-slider" min="200" max="2000" step="100" value="{{ default_parameters.max_output_tokens }}">
+                                <div class="param-ticks">
+                                    <span>200</span>
+                                    <span>1,000</span>
+                                    <span>2,000</span>
+                                </div>
                             </div>
-                            <div class="form-help">
-                                <span class="form-help-icon">⚙️</span>
-                                <span class="form-help-text">Limits the AI's response length. Higher values allow more detailed output but consume more tokens. Typical range: 500-1000 tokens. Each token ≈ 0.75 words.</span>
-                            </div>
-                        </div>
 
-                        <div class="estimated-cost">
-                            <div class="estimated-cost-label">Estimated Token Cost:</div>
-                            <div class="estimated-cost-value" id="estimated-cost">~800-1200 tokens</div>
-                            <small class="text-muted">Actual usage depends on job description length and your experience data.</small>
+                            <!-- Custom Instructions -->
+                            <div class="custom-instructions">
+                                <div class="instructions-label">
+                                    <svg class="param-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                                    </svg>
+                                    <span>Custom Instructions</span>
+                                    <span class="instructions-optional">Optional</span>
+                                </div>
+                                <p class="param-desc">Provide specific guidance for content generation while maintaining ATS compatibility</p>
+                                <textarea name="section_instructions" id="section-instructions" class="form-textarea" placeholder="Example: Emphasize cloud architecture experience in Technical Expertise section"></textarea>
+                            </div>
+
+                            <div class="cost-estimate">
+                                <svg class="cost-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"></path>
+                                    <path d="M12 18V6"></path>
+                                </svg>
+                                <span class="cost-label">Estimated Cost:</span>
+                                <span class="cost-value" id="cost-value">~800-1,200 tokens</span>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <div class="form-group">
-                    <button type="submit" class="btn btn-primary">Create Session</button>
-                    <a href="{% url 'tailoring_list' %}" class="btn">Cancel</a>
+                <div class="form-actions">
+                    <button type="submit" class="btn-submit">Create Session</button>
+                    <a href="{% url 'tailoring_list' %}" class="btn-cancel">Cancel</a>
                 </div>
             </form>
             {% else %}
-            <p class="text-muted mb-1">No jobs available. Please add a job first.</p>
-            <a href="{% url 'job_create' %}" class="btn btn-primary">+ Add Job</a>
+            <div class="empty-state">
+                <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+                    <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+                </svg>
+                <p class="empty-text">No jobs available. Add a job posting first to create a tailoring session.</p>
+                <a href="{% url 'job_create' %}" class="btn-submit">Add Job</a>
+            </div>
             {% endif %}
         </div>
     </div>
@@ -815,34 +1185,32 @@ input[type="range"]::-moz-range-thumb:hover {
 {% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-    // Format number with commas
+    // Format number helper
     function formatNumber(num) {
         return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
     }
-    
-    // Format all numbers on page load
-    const tokenBalance = document.querySelector('.token-balance-value');
-    if (tokenBalance) {
-        const value = parseInt(tokenBalance.textContent.replace(/,/g, ''));
-        if (!isNaN(value)) {
-            tokenBalance.textContent = formatNumber(value);
-        }
-    }
-    
-    // Tone preset toggle
-    const tonePreset = document.getElementById('tone_preset');
-    const toneCustom = document.getElementById('tone_custom');
-    if (tonePreset && toneCustom) {
-        const toggleToneField = () => {
-            const isCustom = tonePreset.value === 'custom';
-            toneCustom.style.display = isCustom ? 'block' : 'none';
-            toneCustom.required = isCustom;
-        };
-        tonePreset.addEventListener('change', toggleToneField);
-        toggleToneField();
+
+    // Bullets slider
+    const bulletsSlider = document.getElementById('bullets-slider');
+    const bulletsDisplay = document.getElementById('bullets-display');
+    if (bulletsSlider && bulletsDisplay) {
+        bulletsSlider.addEventListener('input', () => {
+            bulletsDisplay.textContent = bulletsSlider.value;
+            updateCost();
+        });
     }
 
-    // Advanced settings toggle
+    // Tone preset
+    const toneSelect = document.getElementById('tone-select');
+    const toneCustom = document.getElementById('tone-custom');
+    if (toneSelect && toneCustom) {
+        toneSelect.addEventListener('change', () => {
+            toneCustom.style.display = toneSelect.value === 'custom' ? 'block' : 'none';
+            toneCustom.required = toneSelect.value === 'custom';
+        });
+    }
+
+    // Advanced toggle
     const advancedToggle = document.getElementById('advanced-toggle');
     const advancedContent = document.getElementById('advanced-content');
     if (advancedToggle && advancedContent) {
@@ -852,242 +1220,212 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Dynamic cost estimation
-    const bulletsInput = document.getElementById('bullets_per_section');
-    const maxTokensInput = document.getElementById('max_output_tokens');
-    const summaryCheckbox = document.querySelector('input[name="include_summary"]');
-    const coverLetterCheckbox = document.querySelector('input[name="include_cover_letter"]');
-    const costDisplay = document.getElementById('estimated-cost');
+    // Temperature slider
+    const tempSlider = document.getElementById('temp-slider');
+    const tempValue = document.getElementById('temp-value');
+    if (tempSlider && tempValue) {
+        tempSlider.addEventListener('input', () => {
+            tempValue.textContent = parseFloat(tempSlider.value).toFixed(2);
+        });
+    }
 
-    function updateCostEstimate() {
-        if (!costDisplay) return;
-        
-        const bullets = parseInt(bulletsInput?.value || 3);
-        const maxTokens = parseInt(maxTokensInput?.value || 900);
-        const includeSummary = summaryCheckbox?.checked || false;
-        const includeCoverLetter = coverLetterCheckbox?.checked || false;
+    // Tokens slider
+    const tokensSlider = document.getElementById('tokens-slider');
+    const tokensValue = document.getElementById('tokens-value');
+    if (tokensSlider && tokensValue) {
+        tokensSlider.addEventListener('input', () => {
+            tokensValue.textContent = formatNumber(parseInt(tokensSlider.value));
+            updateCost();
+        });
+    }
 
-        // Estimate based on typical usage patterns
-        let estimatedMin = 400 + (bullets * 30);
-        let estimatedMax = 600 + (bullets * 50);
-        
-        const outputEstimate = Math.floor(maxTokens * 0.7);
-        estimatedMax = Math.max(estimatedMax, 600 + outputEstimate);
-        
-        if (includeSummary) {
-            estimatedMin += 50;
-            estimatedMax += 100;
-        }
-        
-        if (includeCoverLetter) {
-            estimatedMin += 150;
-            estimatedMax += 250;
-        }
+    // Cost estimation
+    function updateCost() {
+        const bullets = parseInt(bulletsSlider?.value || 3);
+        const maxTokens = parseInt(tokensSlider?.value || 900);
+        const summary = document.querySelector('input[name="include_summary"]')?.checked || false;
+        const coverLetter = document.querySelector('input[name="include_cover_letter"]')?.checked || false;
 
-        costDisplay.textContent = `~${formatNumber(estimatedMin)}-${formatNumber(estimatedMax)} tokens`;
-        
-        // Add warning if high
-        const parent = costDisplay.closest('.estimated-cost');
-        if (estimatedMax > 1500) {
-            if (!parent.querySelector('.cost-warning')) {
-                const warning = document.createElement('div');
-                warning.className = 'cost-warning text-warning mt-1';
-                warning.textContent = '⚠️ High token usage - consider reducing max output tokens or bullets per section';
-                parent.appendChild(warning);
-            }
-        } else {
-            const warning = parent.querySelector('.cost-warning');
-            if (warning) warning.remove();
+        let min = 400 + (bullets * 30);
+        let max = 600 + (bullets * 50) + Math.floor(maxTokens * 0.5);
+
+        if (summary) { min += 50; max += 100; }
+        if (coverLetter) { min += 150; max += 250; }
+
+        const costValue = document.getElementById('cost-value');
+        if (costValue) {
+            costValue.textContent = `~${formatNumber(min)}-${formatNumber(max)} tokens`;
         }
     }
 
-    // Update on input changes
-    [bulletsInput, maxTokensInput, summaryCheckbox, coverLetterCheckbox].forEach(el => {
-        if (el) {
-            el.addEventListener('change', updateCostEstimate);
-            el.addEventListener('input', updateCostEstimate);
-        }
+    document.querySelectorAll('input[name="include_summary"], input[name="include_cover_letter"]').forEach(el => {
+        el.addEventListener('change', updateCost);
     });
 
-    // Initial calculation
-    updateCostEstimate();
-    
-    // Sections selector with drag and drop
-    const sectionsHiddenInput = document.getElementById('sections');
+    // Sections management
+    const sectionsInput = document.getElementById('sections');
     const sectionsOrderInput = document.getElementById('sections_order');
-    const sectionCheckboxes = document.querySelectorAll('input[name="section_check"]');
+    const selectedList = document.getElementById('selected-list');
     const customSectionInput = document.getElementById('custom-section');
-    const addCustomSectionBtn = document.getElementById('add-custom-section');
-    const selectedSectionsList = document.getElementById('selected-sections-list');
-    
+    const addCustomBtn = document.getElementById('add-custom-section');
+
+    if (!sectionsInput || !sectionsOrderInput || !selectedList) {
+        console.error('Section elements not found');
+        return;
+    }
+
     let draggedElement = null;
-    
-    function updateSelectedSectionsList() {
-        const selectedSections = Array.from(sectionCheckboxes)
-            .filter(cb => cb.checked)
-            .map(cb => cb.value);
-        
-        selectedSectionsList.innerHTML = '';
-        
-        if (selectedSections.length === 0) {
-            selectedSectionsList.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 1rem;">No sections selected. Check boxes above to add sections.</div>';
-            sectionsHiddenInput.value = '';
+
+    function updateSelectedList() {
+        const checkboxes = document.querySelectorAll('input[name="section_check"]');
+        const selected = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+
+        selectedList.innerHTML = '';
+
+        if (selected.length === 0) {
+            selectedList.innerHTML = '<div class="selected-empty">Select sections above to begin</div>';
+            sectionsInput.value = '';
             sectionsOrderInput.value = '';
             return;
         }
-        
-        selectedSections.forEach((section, index) => {
+
+        selected.forEach((section, index) => {
             const item = document.createElement('div');
-            item.className = 'selected-section-item';
+            item.className = 'selected-item';
             item.draggable = true;
             item.dataset.section = section;
             item.innerHTML = `
-                <span class="drag-handle">⋮⋮</span>
-                <span class="section-order-number">${index + 1}</span>
-                <span style="flex: 1;">${section}</span>
-                <button type="button" class="remove-section-btn" data-section="${section}">✕ Remove</button>
+                <svg class="drag-handle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="4" y1="8" x2="4" y2="16"></line>
+                    <line x1="8" y1="8" x2="8" y2="16"></line>
+                    <line x1="16" y1="8" x2="16" y2="16"></line>
+                    <line x1="20" y1="8" x2="20" y2="16"></line>
+                </svg>
+                <span class="item-number">${index + 1}</span>
+                <span class="item-text">${section}</span>
+                <button type="button" class="item-remove" data-section="${section}">Remove</button>
             `;
-            
-            // Drag events
+
             item.addEventListener('dragstart', handleDragStart);
             item.addEventListener('dragover', handleDragOver);
             item.addEventListener('drop', handleDrop);
             item.addEventListener('dragend', handleDragEnd);
-            
-            // Remove button
-            item.querySelector('.remove-section-btn').addEventListener('click', () => {
-                const checkbox = Array.from(sectionCheckboxes).find(cb => cb.value === section);
+
+            item.querySelector('.item-remove').addEventListener('click', () => {
+                const checkbox = Array.from(checkboxes).find(cb => cb.value === section);
                 if (checkbox) {
                     checkbox.checked = false;
-                    updateSelectedSectionsList();
+                    updateSelectedList();
                 }
             });
-            
-            selectedSectionsList.appendChild(item);
+
+            selectedList.appendChild(item);
         });
-        
-        sectionsHiddenInput.value = selectedSections.join('\n');
-        sectionsOrderInput.value = selectedSections.join(',');
+
+        sectionsInput.value = selected.join('\n');
+        sectionsOrderInput.value = selected.join(',');
     }
-    
+
     function handleDragStart(e) {
         draggedElement = this;
         this.classList.add('dragging');
         e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/html', this.innerHTML);
     }
-    
+
     function handleDragOver(e) {
-        if (e.preventDefault) {
-            e.preventDefault();
-        }
+        e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
-        
-        const draggedOver = e.currentTarget;
-        if (draggedElement !== draggedOver) {
-            draggedOver.classList.add('drag-over');
+
+        if (draggedElement !== e.currentTarget) {
+            e.currentTarget.classList.add('drag-over');
         }
-        return false;
     }
-    
+
     function handleDrop(e) {
-        if (e.stopPropagation) {
-            e.stopPropagation();
-        }
-        
-        const draggedOver = e.currentTarget;
-        if (draggedElement !== draggedOver) {
-            // Swap positions
-            const allItems = Array.from(selectedSectionsList.children);
+        e.stopPropagation();
+        e.preventDefault();
+
+        const target = e.currentTarget;
+        if (draggedElement !== target) {
+            const allItems = Array.from(selectedList.children);
             const draggedIndex = allItems.indexOf(draggedElement);
-            const targetIndex = allItems.indexOf(draggedOver);
-            
+            const targetIndex = allItems.indexOf(target);
+
             if (draggedIndex < targetIndex) {
-                draggedOver.parentNode.insertBefore(draggedElement, draggedOver.nextSibling);
+                target.parentNode.insertBefore(draggedElement, target.nextSibling);
             } else {
-                draggedOver.parentNode.insertBefore(draggedElement, draggedOver);
+                target.parentNode.insertBefore(draggedElement, target);
             }
-            
-            // Update order numbers and hidden inputs
+
             updateOrderNumbers();
         }
-        
-        draggedOver.classList.remove('drag-over');
-        return false;
+
+        target.classList.remove('drag-over');
     }
-    
-    function handleDragEnd(e) {
+
+    function handleDragEnd() {
         this.classList.remove('dragging');
-        selectedSectionsList.querySelectorAll('.selected-section-item').forEach(item => {
+        selectedList.querySelectorAll('.selected-item').forEach(item => {
             item.classList.remove('drag-over');
         });
     }
-    
+
     function updateOrderNumbers() {
-        const items = selectedSectionsList.querySelectorAll('.selected-section-item');
-        const orderedSections = [];
-        
+        const items = selectedList.querySelectorAll('.selected-item');
+        const ordered = [];
+
         items.forEach((item, index) => {
-            const numberSpan = item.querySelector('.section-order-number');
-            numberSpan.textContent = index + 1;
-            orderedSections.push(item.dataset.section);
+            item.querySelector('.item-number').textContent = index + 1;
+            ordered.push(item.dataset.section);
         });
-        
-        sectionsHiddenInput.value = orderedSections.join('\n');
-        sectionsOrderInput.value = orderedSections.join(',');
+
+        sectionsInput.value = ordered.join('\n');
+        sectionsOrderInput.value = ordered.join(',');
     }
-    
-    // Update selected sections list on checkbox change
-    sectionCheckboxes.forEach(cb => {
-        cb.addEventListener('change', updateSelectedSectionsList);
-    });
-    
-    // Add custom section
-    addCustomSectionBtn.addEventListener('click', () => {
-        const customValue = customSectionInput.value.trim();
-        if (!customValue) return;
-        
-        // Check if already exists
-        const exists = Array.from(sectionCheckboxes).some(cb => cb.value === customValue);
-        if (exists) {
-            alert('This section already exists!');
-            return;
-        }
-        
-        // Find first category to add to (Professional Experience)
-        const firstCategory = document.querySelector('.category-items');
-        if (firstCategory) {
-            const newItem = document.createElement('label');
-            newItem.className = 'section-item';
-            newItem.innerHTML = `
-                <input type="checkbox" name="section_check" value="${customValue}" checked>
-                <span>${customValue}</span>
-            `;
-            firstCategory.appendChild(newItem);
-            
-            // Add event listener to new checkbox
-            const newCheckbox = newItem.querySelector('input[type="checkbox"]');
-            newCheckbox.addEventListener('change', updateSelectedSectionsList);
-            
-            // Clear input and update
-            customSectionInput.value = '';
-            
-            // Re-query checkboxes
-            const allCheckboxes = document.querySelectorAll('input[name="section_check"]');
-            updateSelectedSectionsList();
+
+    document.addEventListener('change', (e) => {
+        if (e.target.matches('input[name="section_check"]')) {
+            updateSelectedList();
         }
     });
-    
-    // Allow Enter key to add custom section
-    customSectionInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            addCustomSectionBtn.click();
-        }
-    });
-    
-    // Initialize sections on load
-    updateSelectedSectionsList();
+
+    if (addCustomBtn && customSectionInput) {
+        addCustomBtn.addEventListener('click', () => {
+            const value = customSectionInput.value.trim();
+            if (!value) return;
+
+            const checkboxes = document.querySelectorAll('input[name="section_check"]');
+            if (Array.from(checkboxes).some(cb => cb.value === value)) {
+                alert('Section already exists');
+                return;
+            }
+
+            const firstCategory = document.querySelector('.section-category');
+            if (firstCategory) {
+                const option = document.createElement('label');
+                option.className = 'section-option';
+                option.innerHTML = `
+                    <input type="checkbox" name="section_check" value="${value}" checked>
+                    <span>${value}</span>
+                `;
+                firstCategory.appendChild(option);
+
+                customSectionInput.value = '';
+                updateSelectedList();
+            }
+        });
+
+        customSectionInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addCustomBtn.click();
+            }
+        });
+    }
+
+    // Initialize
+    updateSelectedList();
+    updateCost();
 });
 </script>
 {% endblock %}

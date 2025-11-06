@@ -136,7 +136,18 @@ def process_tailoring_session(self, session_id: int) -> None:
             )
             suggestions = [ats_summary] + suggestions
             log_debug(f"ATS Score: {ats_score.get('overall_score', 0)}%")
-        
+
+        guardrail_report = result.get("guardrail_report", [])
+        if guardrail_report:
+            log_debug(f"Guardrail findings: {json.dumps(guardrail_report)}")
+
+        cover_letter_points = result.get("cover_letter_talking_points", [])
+        if cover_letter_points:
+            log_debug(
+                "Cover letter talking points prepared: "
+                f"{', '.join(cover_letter_points[:3])}"
+            )
+
         session.ai_suggestions = "\n".join(suggestions)
         session.cover_letter = result.get("cover_letter", "")
         session.token_usage = token_usage
@@ -144,6 +155,15 @@ def process_tailoring_session(self, session_id: int) -> None:
         session.job_snapshot = job_snapshot
         session.input_experience_snapshot = experience_snapshot
         session.parameters = parameters
+        session.output_metadata = {
+            "bullet_details": result.get("bullet_details", []),
+            "guardrails": guardrail_report,
+            "bullet_quality": result.get("bullet_quality", {}),
+            "section_layout": result.get("section_layout", []),
+            "cover_letter_talking_points": cover_letter_points,
+            "job_location_name": result.get("job_location_name", ""),
+            "job_location_coordinates": result.get("job_location_coordinates"),
+        }
         session.status = TailoringSession.Status.COMPLETED
         session.completed_at = timezone.now()
 
@@ -174,6 +194,7 @@ def process_tailoring_session(self, session_id: int) -> None:
                 "job_snapshot",
                 "input_experience_snapshot",
                 "parameters",
+                "output_metadata",
                 "status",
                 "completed_at",
                 "debug_log",

@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load tailoring_filters %}
 
 {% block title %}Profile - MyApply{% endblock %}
 
@@ -58,7 +59,7 @@
                 </div>
                 <div>
                     <p class="text-muted">Tokens Available</p>
-                    <p class="text-success">{{ user.tokens_available }}</p>
+                    <p class="text-success" style="font-size: 1.5rem; font-weight: 700;">💎 {{ user.tokens_available|format_number }}</p>
                 </div>
             </div>
         </div>
