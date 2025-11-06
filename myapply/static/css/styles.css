@@ -133,3 +133,31 @@ body {
 .footer .tech {
     color: #38bdf8;
 }
+
+/* General rule for all inline SVGs */
+svg {
+    width: 1rem !important;   /* force small width */
+    height: 1rem !important;  /* force small height */
+    vertical-align: middle;
+}
+
+/* Plus icon inside buttons */
+.btn svg.icon-plus {
+    width: 1rem !important;
+    height: 1rem !important;
+    margin-right: 0.3rem;
+}
+
+/* Calendar and location icons in experience meta */
+.experience-meta svg {
+    width: 0.9rem !important;
+    height: 0.9rem !important;
+    margin-right: 0.25rem;
+}
+
+/* Edit/Delete icons */
+.experience-actions svg {
+    width: 1rem !important;
+    height: 1rem !important;
+    margin-right: 0.25rem;
+}
