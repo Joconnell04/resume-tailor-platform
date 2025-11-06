@@ -94,15 +94,14 @@ class TailoringSessionViewSet(viewsets.ModelViewSet):
         try:
             service = AgentKitTailoringService()
             
-            # Use raw_description if available, otherwise indicate URL scraping needed
-            job_description = job.raw_description
-            if not job_description and job.source_url:
-                # TODO: Implement URL scraping in service
-                job_description = f"[URL to scrape: {job.source_url}]"
+            # Use raw_description if available; OpenAI will fetch from URL via grounding
+            job_description = job.raw_description or ""
+            source_url = job.source_url or ""
             
             result = service.run_workflow(
                 job_description=job_description,
-                experience_graph=experience_data
+                experience_graph=experience_data,
+                source_url=source_url
             )
             
             # Update session with results
@@ -180,13 +179,14 @@ class TailoringSessionViewSet(viewsets.ModelViewSet):
             service = AgentKitTailoringService()
             job = original_session.job
             
-            job_description = job.raw_description
-            if not job_description and job.source_url:
-                job_description = f"[URL to scrape: {job.source_url}]"
+            # Use raw_description if available; OpenAI will fetch from URL via grounding
+            job_description = job.raw_description or ""
+            source_url = job.source_url or ""
             
             result = service.run_workflow(
                 job_description=job_description,
-                experience_graph=experience_data
+                experience_graph=experience_data,
+                source_url=source_url
             )
             
             new_session.generated_title = result.get('title', '')

@@ -29,9 +29,3 @@ class AgentKitTailoringServiceTests(SimpleTestCase):
         self.assertAlmostEqual(params["temperature"], 0.65)
         self.assertFalse(params["include_summary"])
         self.assertTrue(params["include_cover_letter"])
-
-    def test_combine_job_content_deduplicates(self) -> None:
-        service = object.__new__(AgentKitTailoringService)
-        combined = AgentKitTailoringService.combine_job_content(service, "Role details", "Role details\nPreferred skills")
-        self.assertIn("Preferred skills", combined)
-        self.assertEqual(combined.count("Role details"), 1)

@@ -70,16 +70,10 @@ def process_tailoring_session(self, session_id: int) -> None:
         existing_job_snapshot = session.job_snapshot or {}
         raw_description = job.raw_description or existing_job_snapshot.get("raw_description", "")
         source_url = job.source_url or existing_job_snapshot.get("source_url", "")
-        scraped_text = ""
 
+        # OpenAI will use web search (grounding) to fetch job details from URL
         if source_url:
-            try:
-                scraped_text = service.scrape_job_url(source_url)
-                log_debug(
-                    f"Scraped job description from source URL (length={len(scraped_text)})"
-                )
-            except Exception as scrape_exc:
-                log_debug(f"Job scraping failed: {scrape_exc}")
+            log_debug(f"Will use OpenAI web search for job URL: {source_url}")
 
         job_snapshot = {
             "title": job.title,
@@ -89,8 +83,6 @@ def process_tailoring_session(self, session_id: int) -> None:
             "raw_description": raw_description,
         }
         job_snapshot.update(existing_job_snapshot)
-        if scraped_text:
-            job_snapshot["scraped_excerpt"] = scraped_text[:2000]
 
         experience_snapshot = session.input_experience_snapshot or {}
         if not experience_snapshot:
@@ -101,13 +93,14 @@ def process_tailoring_session(self, session_id: int) -> None:
                 experience_snapshot = {}
                 log_debug("No experience graph found for user; proceeding with empty data.")
 
-        merged_job_description = service.combine_job_content(raw_description, scraped_text)
+        # Use raw description as-is; OpenAI will fetch from URL if provided
+        merged_job_description = raw_description or ""
+        if not merged_job_description.strip() and not source_url:
+            raise TailoringPipelineError(
+                "No job description or URL provided. Unable to tailor resume content."
+            )
         if not merged_job_description.strip():
-            if not source_url:
-                raise TailoringPipelineError(
-                    "No job description or URL provided. Unable to tailor resume content."
-                )
-            log_debug("Job description empty after merge; relying solely on URL context.")
+            log_debug("No description text; relying on OpenAI web search from URL")
 
         parameters = service.normalize_parameters(session.parameters or {})
 
@@ -129,7 +122,22 @@ def process_tailoring_session(self, session_id: int) -> None:
         session.generated_bullets = result.get("bullets", [])
         session.generated_sections = result.get("sections", [])
         session.tailored_resume = result.get("summary", "")
-        session.ai_suggestions = "\n".join(result.get("suggestions", []))
+        
+        # Include ATS score in suggestions
+        ats_score = result.get("ats_score", {})
+        suggestions = result.get("suggestions", [])
+        
+        # Prepend ATS score summary to suggestions
+        if ats_score:
+            ats_summary = (
+                f"📊 ATS Compatibility: {ats_score.get('overall_score', 0)}% | "
+                f"Required Skills: {ats_score.get('required_skills_match', 0)}% | "
+                f"Keywords: {ats_score.get('keyword_match', 0)}%"
+            )
+            suggestions = [ats_summary] + suggestions
+            log_debug(f"ATS Score: {ats_score.get('overall_score', 0)}%")
+        
+        session.ai_suggestions = "\n".join(suggestions)
         session.cover_letter = result.get("cover_letter", "")
         session.token_usage = token_usage
         session.openai_run_id = result.get("run_id", "")
@@ -142,6 +150,13 @@ def process_tailoring_session(self, session_id: int) -> None:
         debug_payload = result.get("debug", {})
         if debug_payload:
             log_debug(f"Pipeline debug data: {json.dumps(debug_payload)}")
+        
+        # Log bullet quality issues if any
+        bullet_quality = result.get("bullet_quality", {})
+        if bullet_quality.get("issues_found", 0) > 0:
+            log_debug(
+                f"Found {bullet_quality['issues_found']} bullet points with quality issues"
+            )
 
         log_debug("Tailoring pipeline completed successfully.")
 
