@@ -43,7 +43,7 @@ INSTALLED_APPS = [
     'profiles',
     'experience',
     'jobs',
-    'tailoring',
+    'tailoring.apps.TailoringConfig',
     'maps',
 ]
 
