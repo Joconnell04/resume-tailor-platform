@@ -546,7 +546,7 @@ class AgentKitTailoringService:
                 },
                 "sections": [
                     {
-                        "name": "str - Section name from section_plan",
+                        "name": "str - MUST use exact section name from section_plan (DO NOT change or rename - copy the exact string)",
                         "bullets": f"Array of EXACTLY {bullets_per_section} bullet objects (not fewer, not more). Each bullet must be a separate object:",
                         "bullet_structure": {
                             "id": "str",
@@ -580,11 +580,14 @@ class AgentKitTailoringService:
             "Your goal is to craft compelling bullet points that pass ATS screening while showcasing quantifiable impact.\n\n"
             
             "SECTION STRUCTURE (CRITICAL - FOLLOW EXACTLY):\n"
-            "- The 'section_plan' field specifies the EXACT section names and order you MUST use\n"
-            "- Generate sections with the exact names provided in section_plan (e.g., 'Professional Highlights' not 'Professional Experience')\n"
-            "- Use ONLY the snippet_ids listed for each section in the section_plan\n"
-            "- DO NOT rename, reorder, or modify section names from what is provided in section_plan\n"
-            "- If section_plan specifies ['Professional Highlights', 'Strategic Initiatives'], output those exact names\n\n"
+            "- The 'section_plan' field contains an array of sections with 'name' and 'snippet_ids'\n"
+            "- For each section in section_plan, create a section in your output with the EXACT SAME NAME\n"
+            "- COPY THE SECTION NAME CHARACTER-FOR-CHARACTER from section_plan.name to your output sections[].name\n"
+            "- DO NOT rename, paraphrase, or modify section names in any way\n"
+            "- DO NOT reorder sections - use the same order as section_plan\n"
+            "- Example: If section_plan has 'Team Leadership', your output MUST have 'Team Leadership' (not 'Leadership' or 'Team Management')\n"
+            "- Example: If section_plan has 'Software Skills', your output MUST have 'Software Skills' (not 'Technical Skills' or 'Skills')\n"
+            "- Use ONLY the snippet_ids listed for each section in the section_plan\n\n"
             
             "CRITICAL WRITING STANDARDS:\n"
             "- NEVER use '+' as abbreviations for 'and' (write 'React and TypeScript', not 'React + TypeScript')\n"
@@ -1479,11 +1482,19 @@ class AgentKitTailoringService:
         """
         Create a section plan matching user-requested section names to available snippets.
         
-        If user requests custom names (e.g., "Professional Highlights"), this method will:
+        Strategy:
         1. Try exact match with bucket names in selected_snippets
-        2. If no match, map to available buckets in order
-        3. Use custom names in output while referencing correct snippet IDs
+        2. If no exact match, distribute available buckets across requested sections
+        3. If more sections requested than buckets available, some sections will be empty
+        4. Use custom section names in output while referencing correct snippet IDs
         """
+        if not layout:
+            # No custom layout, use bucket names as-is
+            return [
+                {"name": bucket, "snippet_ids": [s.snippet_id for s in snippets]}
+                for bucket, snippets in selected_snippets.items()
+            ]
+        
         plan: List[Dict[str, object]] = []
         seen_ids: set[str] = set()
         available_buckets = list(selected_snippets.keys())
@@ -1499,7 +1510,13 @@ class AgentKitTailoringService:
                 snippets = selected_snippets.get(actual_bucket)
                 bucket_index += 1
             
+            # Skip sections with no snippets (user requested more sections than available)
             if not snippets:
+                logger.warning(
+                    f"Section '{section_name}' has no snippets available. "
+                    f"Only {len(available_buckets)} bucket(s) with snippets: {available_buckets}. "
+                    f"Skipping this section."
+                )
                 continue
                 
             snippet_ids = []
@@ -1516,6 +1533,7 @@ class AgentKitTailoringService:
                 })
 
         # Fallback: include any remaining snippets not covered by layout
+        # This happens if there are more buckets than requested sections
         remaining = []
         for bucket, snippets in selected_snippets.items():
             missing_ids = [s.snippet_id for s in snippets if s.snippet_id not in seen_ids]
