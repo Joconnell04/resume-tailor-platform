@@ -1438,22 +1438,42 @@ class AgentKitTailoringService:
         selected_snippets: Dict[str, List[ExperienceSnippet]],
         layout: Sequence[str],
     ) -> List[Dict[str, object]]:
+        """
+        Create a section plan matching user-requested section names to available snippets.
+        
+        If user requests custom names (e.g., "Professional Highlights"), this method will:
+        1. Try exact match with bucket names in selected_snippets
+        2. If no match, map to available buckets in order
+        3. Use custom names in output while referencing correct snippet IDs
+        """
         plan: List[Dict[str, object]] = []
         seen_ids: set[str] = set()
+        available_buckets = list(selected_snippets.keys())
+        bucket_index = 0
 
         for section_name in layout:
+            # Try exact match first
             snippets = selected_snippets.get(section_name)
+            
+            # If no exact match and we have unused buckets, use the next available bucket
+            if not snippets and bucket_index < len(available_buckets):
+                actual_bucket = available_buckets[bucket_index]
+                snippets = selected_snippets.get(actual_bucket)
+                bucket_index += 1
+            
             if not snippets:
                 continue
+                
             snippet_ids = []
             for snippet in snippets:
                 if snippet.snippet_id in seen_ids:
                     continue
                 seen_ids.add(snippet.snippet_id)
                 snippet_ids.append(snippet.snippet_id)
+            
             if snippet_ids:
                 plan.append({
-                    "name": section_name,
+                    "name": section_name,  # Use user's requested name
                     "snippet_ids": snippet_ids,
                 })
 
