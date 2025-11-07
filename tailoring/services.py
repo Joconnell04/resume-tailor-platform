@@ -485,7 +485,10 @@ class AgentKitTailoringService:
         token_usage_totals = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
         debug_refs: Dict[str, Any] = {}
 
-        section_plan = self._plan_sections(selected_snippets, parameters.get("section_layout", []))
+        # Use 'sections' parameter if provided, otherwise fall back to 'section_layout'
+        # 'sections' = user's requested sections, 'section_layout' = default ordering
+        requested_sections = parameters.get("sections", []) or parameters.get("section_layout", [])
+        section_plan = self._plan_sections(selected_snippets, requested_sections)
         experience_payload = self._snippets_prompt_payload(selected_snippets)
 
         stretch_level = parameters.get("stretch_level", 2)
@@ -575,6 +578,13 @@ class AgentKitTailoringService:
         base_instructions = (
             "You are an elite resume strategist specializing in ATS-optimized, results-driven professional documents. "
             "Your goal is to craft compelling bullet points that pass ATS screening while showcasing quantifiable impact.\n\n"
+            
+            "SECTION STRUCTURE (CRITICAL - FOLLOW EXACTLY):\n"
+            "- The 'section_plan' field specifies the EXACT section names and order you MUST use\n"
+            "- Generate sections with the exact names provided in section_plan (e.g., 'Professional Highlights' not 'Professional Experience')\n"
+            "- Use ONLY the snippet_ids listed for each section in the section_plan\n"
+            "- DO NOT rename, reorder, or modify section names from what is provided in section_plan\n"
+            "- If section_plan specifies ['Professional Highlights', 'Strategic Initiatives'], output those exact names\n\n"
             
             "CRITICAL WRITING STANDARDS:\n"
             "- NEVER use '+' as abbreviations for 'and' (write 'React and TypeScript', not 'React + TypeScript')\n"
@@ -1069,6 +1079,11 @@ class AgentKitTailoringService:
         else:
             layout = list(cls.DEFAULT_PARAMETERS["section_layout"])
         merged["section_layout"] = layout or list(cls.DEFAULT_PARAMETERS["section_layout"])
+        
+        # If user provided 'sections', use those as the section_layout as well
+        # 'sections' takes precedence over 'section_layout'
+        if "sections" in parameters and merged.get("sections"):
+            merged["section_layout"] = merged["sections"]
 
         inserts = merged.get("cover_letter_inserts") or []
         if isinstance(inserts, str):
