@@ -183,7 +183,7 @@ class AgentKitTailoringService:
         "include_summary": True,
         "include_cover_letter": False,
         "temperature": 0.35,
-        "max_output_tokens": 2000,  # Increased to accommodate detailed output with job_requirements
+        "max_output_tokens": 3500,  # Increased to prevent JSON truncation with job_requirements and web search content
         "stretch_level": 2,
         "section_layout": [
             "Professional Experience",
@@ -654,7 +654,7 @@ class AgentKitTailoringService:
             instructions=instructions,
             payload=generation_payload,
             temperature=float(parameters.get("temperature", 0.35)),
-            max_output_tokens=int(parameters.get("max_output_tokens", 2000)),
+            max_output_tokens=int(parameters.get("max_output_tokens", 3500)),
             grounding=grounding,
         )
 
@@ -1093,6 +1093,44 @@ class AgentKitTailoringService:
         else:
             inserts = []
         merged["cover_letter_inserts"] = inserts
+        
+        # Enforce token limits to prevent JSON truncation and excessive costs
+        # Hard limits from UI configuration
+        ABSOLUTE_MIN_TOKENS = 1000
+        ABSOLUTE_MAX_TOKENS = 6500
+        
+        # Calculate required tokens based on configuration
+        min_tokens = 2500  # Base minimum for resume generation
+        
+        # Cover letter needs separate API call, doesn't affect resume token limit
+        # But having many bullets or sections increases resume token needs
+        if merged.get("bullets_per_section", 3) >= 5:
+            min_tokens = max(min_tokens, 3000)  # Many bullets need more tokens
+        
+        num_sections = len(merged.get("sections", [])) or len(merged.get("section_layout", []))
+        if num_sections >= 3 and merged.get("bullets_per_section", 3) >= 4:
+            min_tokens = max(min_tokens, 3500)  # 3+ sections with 4+ bullets each
+        
+        # Apply absolute minimum (UI constraint)
+        min_tokens = max(min_tokens, ABSOLUTE_MIN_TOKENS)
+        
+        # If user's max_output_tokens is too low, increase it and log warning
+        if merged["max_output_tokens"] < min_tokens:
+            logger.warning(
+                f"max_output_tokens ({merged['max_output_tokens']}) is below safe minimum ({min_tokens}) "
+                f"for current configuration (sections={num_sections}, "
+                f"bullets_per_section={merged.get('bullets_per_section')}). "
+                f"Automatically increasing to {min_tokens} to prevent JSON truncation."
+            )
+            merged["max_output_tokens"] = min_tokens
+        
+        # Apply absolute maximum (UI constraint and cost control)
+        if merged["max_output_tokens"] > ABSOLUTE_MAX_TOKENS:
+            logger.warning(
+                f"max_output_tokens ({merged['max_output_tokens']}) exceeds maximum allowed ({ABSOLUTE_MAX_TOKENS}). "
+                f"Capping at {ABSOLUTE_MAX_TOKENS} for cost control."
+            )
+            merged["max_output_tokens"] = ABSOLUTE_MAX_TOKENS
 
         return merged
 
