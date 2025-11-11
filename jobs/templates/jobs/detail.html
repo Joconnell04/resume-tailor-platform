@@ -6,7 +6,7 @@
 {% block content %}
 <div class="page-header">
     <h1 class="page-title">{{ job.title }}</h1>
-    <div style="display: flex; gap: 0.75rem;">
+    <div class="page-header-actions">
         <a href="{% url 'job_edit' job.id %}" class="btn">Edit Job</a>
         <a href="{% url 'job_delete' job.id %}" class="btn btn-danger">Delete</a>
     </div>
