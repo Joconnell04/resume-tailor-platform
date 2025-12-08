@@ -10,59 +10,146 @@
         border-radius: 12px;
         margin-top: 20px;
     }
+    #distance-info {
+        margin-top: 15px;
+        padding: 10px;
+        background: #f1f1f1;
+        border-radius: 8px;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
 <h2>Applicant Job Map</h2>
+
+<label for="start-location">Enter your starting location:</label>
+<input type="text" id="start-location" placeholder="e.g. 123 Main St, New York, NY" style="width: 50%; padding:5px;" />
+
 <div id="map"></div>
+<div id="distance-info">Distance info will appear here when you select a job.</div>
 {% endblock %}
 
 {% block extra_js %}
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.1.0/mapbox-gl.js"></script>
 
 <script>
-    // Debug: check if MAPBOX_TOKEN is passed correctly
-    const MAPBOX_TOKEN = "{{ MAPBOX_TOKEN }}";
-    console.log("Mapbox Token:", MAPBOX_TOKEN);
+mapboxgl.accessToken = "{{ MAPBOX_TOKEN }}";
 
-    if (!MAPBOX_TOKEN) {
-        alert("Mapbox token is missing! Check environment variables.");
-    }
+const jobPoints = JSON.parse('{{ job_points_json|default:"[]"|escapejs }}');
+const defaultCenter = JSON.parse('{{ default_center|default:"[-98.5795, 39.8283]"|escapejs }}');
 
-    mapboxgl.accessToken = MAPBOX_TOKEN;
+const map = new mapboxgl.Map({
+    container: "map",
+    style: "mapbox://styles/mapbox/streets-v12",
+    center: defaultCenter,
+    zoom: 4
+});
 
-    const jobPoints = JSON.parse('{{ job_points_json|default:"[]"|escapejs }}');
-    console.log("Job Points:", jobPoints);
+const distanceInfo = document.getElementById('distance-info');
+let routeLayerId = null;
 
-    // Default center: USA
-    let center = [-98.5795, 39.8283];
-    if (jobPoints.length > 0) {
-        // Center map on first job if available
-        center = [jobPoints[0].longitude, jobPoints[0].latitude];
-    }
-
-    const map = new mapboxgl.Map({
-        container: "map",
-        style: "mapbox://styles/mapbox/streets-v12",
-        center: center,
-        zoom: 4
-    });
-
-    // Add markers for each job
-    jobPoints.forEach(job => {
-        if (job.longitude && job.latitude) {
-            new mapboxgl.Marker({ color: "red" })
-                .setLngLat([job.longitude, job.latitude])
-                .setPopup(
-                    new mapboxgl.Popup().setHTML(`
-                        <strong>${job.title}</strong><br>
-                        ${job.location_text}
-                    `)
-                )
-                .addTo(map);
+// Helper function to get distance from backend
+function getDistance(start, end, markerTitle) {
+    fetch("/api/maps/distance/", {  // <-- direct URL, no namespace
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({
+            origin_longitude: start[0],
+            origin_latitude: start[1],
+            destination_longitude: end[0],
+            destination_latitude: end[1]
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.distance_km) {
+            distanceInfo.innerHTML = `<strong>${markerTitle}</strong><br>
+                                      Distance: ${data.distance_km} km<br>
+                                      Estimated Duration: ${data.duration_minutes} min`;
+        } else if (data.error) {
+            distanceInfo.innerHTML = `<strong>Error:</strong> ${data.error}`;
         }
     });
+}
 
+// Helper function to draw route using Mapbox Directions API
+function drawRoute(start, end) {
+    fetch(`https://api.mapbox.com/directions/v5/mapbox/driving/${start[0]},${start[1]};${end[0]},${end[1]}?geometries=geojson&access_token={{ MAPBOX_TOKEN }}`)
+        .then(res => res.json())
+        .then(data => {
+            if (!data.routes || data.routes.length === 0) return;
+
+            const route = data.routes[0].geometry;
+
+            // Remove existing route if present
+            if (routeLayerId && map.getSource(routeLayerId)) {
+                map.removeLayer(routeLayerId);
+                map.removeSource(routeLayerId);
+            }
+
+            routeLayerId = 'route-line';
+            map.addSource(routeLayerId, {
+                type: 'geojson',
+                data: {
+                    type: 'Feature',
+                    geometry: route
+                }
+            });
+
+            map.addLayer({
+                id: routeLayerId,
+                type: 'line',
+                source: routeLayerId,
+                layout: {
+                    'line-join': 'round',
+                    'line-cap': 'round'
+                },
+                paint: {
+                    'line-color': '#1DB7DD',
+                    'line-width': 5
+                }
+            });
+        });
+}
+
+// Add markers and click event
+jobPoints.forEach(job => {
+    if (job.longitude && job.latitude) {
+        const marker = new mapboxgl.Marker({ color: "red" })
+            .setLngLat([job.longitude, job.latitude])
+            .setPopup(
+                new mapboxgl.Popup().setHTML(`
+                    <strong>${job.title}</strong><br>
+                    ${job.location_text}
+                `)
+            )
+            .addTo(map);
+
+        marker.getElement().addEventListener('click', () => {
+            const startLocationText = document.getElementById('start-location').value;
+            if (!startLocationText) {
+                alert("Please enter your starting location first!");
+                return;
+            }
+
+            // Geocode start location
+            fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(startLocationText)}.json?access_token={{ MAPBOX_TOKEN }}&limit=1`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.features && data.features.length > 0) {
+                        const startCoords = data.features[0].geometry.coordinates;
+                        const endCoords = [job.longitude, job.latitude];
+                        getDistance(startCoords, endCoords, job.title);
+                        drawRoute(startCoords, endCoords);
+                    } else {
+                        alert("Could not geocode your starting location!");
+                    }
+                });
+        });
+    }
+});
 </script>
 {% endblock %}
