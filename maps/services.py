@@ -8,59 +8,42 @@ import requests
 
 
 class MapboxIsochroneService:
-    """
-    Service for Mapbox Isochrone API.
-    
-    Calculates reachable areas within a given travel time from a location.
-    Useful for determining if a job is within commuting distance.
-    
-    TODO: Implement actual Mapbox API integration
-    - Set up Mapbox client with API token
-    - Implement coordinate geocoding if needed
-    - Make actual API calls to Mapbox Isochrone endpoint
-    - Parse and return isochrone geometry
-    - Calculate distance between two points
-    """
-    
-    BASE_URL = "https://api.mapbox.com/isochrone/v1/mapbox/driving"
-    
+    BASE_ISOCHRONE_URL = "https://api.mapbox.com/isochrone/v1/mapbox/driving"
+    BASE_DIRECTIONS_URL = "https://api.mapbox.com/directions/v5/mapbox/driving"
+
     def __init__(self):
-        """Initialize service with API configuration."""
-        self.token = os.environ.get('MAPBOX_TOKEN', '')
+        self.token = os.environ.get("MAPBOX_TOKEN", "")
         if not self.token:
-            print("Warning: MAPBOX_TOKEN not set. Map features will not work.")
-    
+            raise ValueError("MAPBOX_TOKEN not set in environment variables")
+
+    # -----------------------------
+    # ISOCHRONE REQUEST
+    # -----------------------------
     def get_isochrone(self, lon: float, lat: float, minutes: int = 15) -> dict:
-        """
-        Get isochrone data for a location.
+        url = f"{self.BASE_ISOCHRONE_URL}/{lon},{lat}"
+        params = {
+            "contours_minutes": minutes,
+            "polygons": "true",
+            "access_token": self.token
+        }
+
+        try:
+            response = requests.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
+            geometry = data.get("features", [{}])[0]
+        except Exception as e:
+            geometry = {}
         
-        An isochrone represents the area reachable within a given time.
-        
-        Args:
-            lon: Longitude of the starting point
-            lat: Latitude of the starting point
-            minutes: Travel time in minutes (default: 15)
-        
-        Returns:
-            dict with isochrone data:
-                - center: [lon, lat]
-                - minutes: travel time
-                - geometry: GeoJSON geometry (to be implemented)
-        
-        TODO: Implement actual API call
-        Example API call:
-        GET https://api.mapbox.com/isochrone/v1/mapbox/driving/{lon},{lat}
-            ?contours_minutes={minutes}
-            &access_token={token}
-        """
-        # Placeholder return
         return {
             "center": [lon, lat],
             "minutes": minutes,
-            "geometry": {},
-            "note": "Mapbox integration not yet implemented"
+            "geometry": geometry
         }
-    
+
+    # -----------------------------
+    # DISTANCE CALCULATION
+    # -----------------------------
     def calculate_distance(
         self,
         origin_lon: float,
@@ -68,25 +51,51 @@ class MapboxIsochroneService:
         dest_lon: float,
         dest_lat: float
     ) -> dict:
-        """
-        Calculate distance/travel time between two points.
-        
-        Args:
-            origin_lon: Origin longitude
-            origin_lat: Origin latitude
-            dest_lon: Destination longitude
-            dest_lat: Destination latitude
-        
-        Returns:
-            dict with:
-                - distance_km: Distance in kilometers
-                - duration_minutes: Estimated travel time
-        
-        TODO: Implement using Mapbox Directions API
-        """
-        # Placeholder return
-        return {
-            "distance_km": 0,
-            "duration_minutes": 0,
-            "note": "Distance calculation not yet implemented"
+        coordinates = f"{origin_lon},{origin_lat};{dest_lon},{dest_lat}"
+        url = f"{self.BASE_DIRECTIONS_URL}/{coordinates}"
+        params = {
+            "access_token": self.token,
+            "geometries": "geojson"
         }
+
+        try:
+            response = requests.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
+            route = data.get("routes", [{}])[0]
+            distance_km = route.get("distance", 0) / 1000
+            duration_minutes = route.get("duration", 0) / 60
+        except Exception as e:
+            distance_km = 0
+            duration_minutes = 0
+
+        return {
+            "distance_km": round(distance_km, 2),
+            "duration_minutes": round(duration_minutes, 2)
+        }
+
+    # -----------------------------
+    # GEOCODING
+    # -----------------------------
+    def geocode_location(self, location_text: str) -> dict | None:
+        url = f"https://api.mapbox.com/geocoding/v5/mapbox.places/{location_text}.json"
+        params = {
+            "access_token": self.token,
+            "limit": 1
+        }
+
+        try:
+            response = requests.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
+            features = data.get("features", [])
+            if not features:
+                return None
+            coords = features[0]["geometry"]["coordinates"]
+            return {
+                "longitude": coords[0],
+                "latitude": coords[1],
+                "place_name": features[0]["place_name"]
+            }
+        except Exception:
+            return None

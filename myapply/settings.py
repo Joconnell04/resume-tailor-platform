@@ -222,3 +222,5 @@ LOGGING = {
         },
     },
 }
+
+MAPBOX_TOKEN = os.environ.get("MAPBOX_TOKEN", "")

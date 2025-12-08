@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Applicant Map{% endblock %}
+
+{% block extra_css %}
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.1.0/mapbox-gl.css" rel="stylesheet" />
+<style>
+    #map {
+        width: 100%;
+        height: 600px;
+        border-radius: 12px;
+        margin-top: 20px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h2>Applicant Job Map</h2>
+<div id="map"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.1.0/mapbox-gl.js"></script>
+
+<script>
+    // Debug: check if MAPBOX_TOKEN is passed correctly
+    const MAPBOX_TOKEN = "{{ MAPBOX_TOKEN }}";
+    console.log("Mapbox Token:", MAPBOX_TOKEN);
+
+    if (!MAPBOX_TOKEN) {
+        alert("Mapbox token is missing! Check environment variables.");
+    }
+
+    mapboxgl.accessToken = MAPBOX_TOKEN;
+
+    const jobPoints = JSON.parse('{{ job_points_json|default:"[]"|escapejs }}');
+    console.log("Job Points:", jobPoints);
+
+    // Default center: USA
+    let center = [-98.5795, 39.8283];
+    if (jobPoints.length > 0) {
+        // Center map on first job if available
+        center = [jobPoints[0].longitude, jobPoints[0].latitude];
+    }
+
+    const map = new mapboxgl.Map({
+        container: "map",
+        style: "mapbox://styles/mapbox/streets-v12",
+        center: center,
+        zoom: 4
+    });
+
+    // Add markers for each job
+    jobPoints.forEach(job => {
+        if (job.longitude && job.latitude) {
+            new mapboxgl.Marker({ color: "red" })
+                .setLngLat([job.longitude, job.latitude])
+                .setPopup(
+                    new mapboxgl.Popup().setHTML(`
+                        <strong>${job.title}</strong><br>
+                        ${job.location_text}
+                    `)
+                )
+                .addTo(map);
+        }
+    });
+
+</script>
+{% endblock %}
