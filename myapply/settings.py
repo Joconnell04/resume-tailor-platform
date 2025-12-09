@@ -178,7 +178,7 @@ Q_CLUSTER = {
     'orm': 'default',  # Use Django ORM (MySQL) as broker
     'catch_up': True,  # Process missed tasks on startup
     'save_limit': 250,  # Keep last 250 successful tasks
-    'sync': False,  # Run async (set to True for testing)
+    'sync': os.environ.get('DJANGO_Q_SYNC', 'True').lower() == 'true',  # Set to False in production with qcluster running
 }
 
 LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')

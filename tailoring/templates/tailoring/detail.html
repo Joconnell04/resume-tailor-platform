@@ -15,37 +15,43 @@
 }
 
 .info-box {
-    padding: 1.25rem;
-    background: linear-gradient(135deg, rgba(26, 35, 50, 0.6), rgba(26, 35, 50, 0.4));
-    border: 2px solid rgba(74, 144, 226, 0.3);
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    padding: 1.5rem;
+    background: linear-gradient(135deg, var(--bg-tertiary) 0%, rgba(26, 35, 50, 0.95) 100%);
+    border: 1px solid rgba(74, 144, 226, 0.4);
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 }
 
 .info-box h3 {
-    font-size: 1rem;
-    font-weight: 600;
-    color: var(--accent-blue);
-    margin-bottom: 1rem;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--accent-light);
+    margin-bottom: 1.25rem;
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid rgba(74, 144, 226, 0.3);
 }
 
 .info-item {
-    margin-bottom: 0.75rem;
+    margin-bottom: 1rem;
 }
 
 .info-label {
-    font-size: 0.85rem;
-    color: var(--text-dim);
-    margin-bottom: 0.25rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--accent-blue);
+    margin-bottom: 0.35rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .info-value {
-    font-size: 1rem;
+    font-size: 1.05rem;
     color: var(--text-primary);
     font-weight: 500;
+    line-height: 1.5;
 }
 
 .view-job-btn {
@@ -53,10 +59,10 @@
     margin-top: 1rem;
     padding: 0.65rem 1.25rem;
     background: linear-gradient(135deg, var(--accent-blue), var(--accent-light));
-    color: white;
+    color: #0a0f1c;
     text-decoration: none;
     border-radius: 6px;
-    font-weight: 600;
+    font-weight: 700;
     font-size: 0.95rem;
     transition: all 0.3s ease;
     box-shadow: 0 2px 8px rgba(74, 144, 226, 0.3);
@@ -70,11 +76,11 @@
 
 .content-card {
     margin-top: 1.5rem;
-    padding: 1.5rem;
-    background: linear-gradient(135deg, rgba(26, 35, 50, 0.6), rgba(26, 35, 50, 0.4));
-    border: 2px solid rgba(74, 144, 226, 0.3);
-    border-radius: 10px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    padding: 1.75rem;
+    background: linear-gradient(135deg, var(--bg-tertiary) 0%, rgba(26, 35, 50, 0.95) 100%);
+    border: 1px solid rgba(74, 144, 226, 0.4);
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
     animation: slideIn 0.4s ease;
 }
 
@@ -103,24 +109,24 @@
 
 .section-card {
     margin-bottom: 1.5rem;
-    padding: 1.25rem;
-    background: rgba(26, 35, 50, 0.5);
+    padding: 1.5rem;
+    background: rgba(26, 35, 50, 0.95);
     border-left: 4px solid var(--accent-blue);
-    border-radius: 6px;
+    border-radius: 8px;
     transition: all 0.3s ease;
 }
 
 .section-card:hover {
     border-left-color: var(--accent-light);
-    background: rgba(74, 144, 226, 0.08);
+    background: rgba(40, 55, 75, 0.95);
     transform: translateX(4px);
 }
 
 .section-card h3 {
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: var(--accent-light);
-    margin-bottom: 1rem;
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #ffffff;
+    margin-bottom: 1.25rem;
 }
 
 .bullet-list {
@@ -130,19 +136,21 @@
 }
 
 .bullet-list li {
-    padding-left: 1.5rem;
-    margin-bottom: 0.75rem;
+    padding-left: 1.75rem;
+    margin-bottom: 0.85rem;
     position: relative;
-    line-height: 1.6;
-    color: var(--text-primary);
+    line-height: 1.7;
+    color: #ffffff;
+    font-size: 1rem;
 }
 
 .bullet-list li:before {
     content: "▸";
     position: absolute;
     left: 0;
-    color: var(--accent-blue);
+    color: var(--accent-light);
     font-weight: bold;
+    font-size: 1.1rem;
 }
 
 .cover-letter-text {
@@ -182,16 +190,51 @@
 
 .workflow-card {
     margin-top: 2rem;
-    padding: 1.25rem;
-    background: rgba(26, 35, 50, 0.3);
-    border: 1px solid rgba(74, 144, 226, 0.2);
-    border-radius: 8px;
+    padding: 1.5rem;
+    background: linear-gradient(135deg, var(--bg-tertiary) 0%, rgba(26, 35, 50, 0.95) 100%);
+    border: 1px solid rgba(74, 144, 226, 0.4);
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 }
 
 .workflow-card h2 {
-    font-size: 1.1rem;
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--accent-light);
+    margin-bottom: 1.25rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid rgba(74, 144, 226, 0.3);
+}
+
+.workflow-card .text-muted {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--accent-blue);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.75rem;
+}
+
+.workflow-card .meta-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.workflow-card .meta-list li {
+    padding: 0.5rem 0;
+    color: var(--text-primary);
+    border-bottom: 1px solid rgba(74, 144, 226, 0.1);
+    font-size: 0.95rem;
+}
+
+.workflow-card .meta-list li:last-child {
+    border-bottom: none;
+}
+
+.workflow-card .meta-list li strong {
     color: var(--text-secondary);
-    margin-bottom: 1rem;
+    font-weight: 500;
 }
 
 .delete-form {
@@ -221,6 +264,81 @@
     color: var(--text-primary);
     font-size: 1.05rem;
 }
+
+/* Processing Status Card - Improved Visibility */
+.processing-card {
+    margin-top: 2rem;
+    padding: 2rem;
+    background: linear-gradient(135deg, rgba(255, 165, 2, 0.15) 0%, rgba(255, 165, 2, 0.08) 100%);
+    border: 2px solid rgba(255, 165, 2, 0.5);
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(255, 165, 2, 0.15);
+}
+
+.processing-status {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+.processing-status .spinner {
+    width: 48px;
+    height: 48px;
+    border: 4px solid rgba(255, 165, 2, 0.3);
+    border-top-color: var(--warning);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.processing-status h3 {
+    color: var(--warning);
+    font-size: 1.2rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+}
+
+.processing-status p {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    margin: 0;
+}
+
+.processing-status #countdown {
+    color: var(--warning);
+    font-weight: 700;
+}
+
+.processing-status .countdown-text {
+    margin-top: 0.5rem;
+}
+
+/* Grid styling for workflow */
+.meta-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+}
+
+@media (max-width: 768px) {
+    .meta-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Pending status tag - yellow/amber style */
+.tag-pending {
+    background: linear-gradient(135deg, rgba(255, 193, 7, 0.25) 0%, rgba(255, 193, 7, 0.15) 100%);
+    color: #ffc107;
+    border: 1px solid rgba(255, 193, 7, 0.5);
+    padding: 0.35rem 0.75rem;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.85rem;
+}
 </style>
 {% endblock %}
 
@@ -237,6 +355,8 @@
             <span class="tag tag-error">{{ session.get_status_display }}</span>
             {% elif session.status == 'PROCESSING' %}
             <span class="tag tag-warning">{{ session.get_status_display }}</span>
+            {% elif session.status == 'PENDING' %}
+            <span class="tag tag-pending">{{ session.get_status_display }}</span>
             {% else %}
             <span class="tag">{{ session.get_status_display }}</span>
             {% endif %}
@@ -299,12 +419,12 @@
 
     <!-- Session Info -->
     <div class="info-box session-info-box">
-        <h3>📋 Session Information</h3>
+        <h3>Session Information</h3>
         <div class="info-item">
             <div class="info-label">Job Position</div>
             <div class="info-value"><strong>{{ session.job.title }}</strong> at {{ session.job.company }}</div>
         </div>
-        <a href="{% url 'job_detail' session.job.id %}" class="view-job-btn">View Job Details →</a>
+        <a href="{% url 'job_detail' session.job.id %}" class="view-job-btn">View {{ session.job.title }} Details →</a>
         {% if session.job_snapshot.source_url %}
         <div class="info-item info-item-spaced">
             <div class="info-label">Source URL</div>
@@ -326,7 +446,7 @@
     <!-- Workflow Details -->
     {% with params=session.parameters usage=session.token_usage %}
     <div class="workflow-card">
-        <h2>⚙️ Workflow Details</h2>
+        <h2>Workflow Details</h2>
         <div class="grid grid-2 meta-grid">
             <div>
                 <p class="text-muted">Parameters</p>
@@ -379,16 +499,13 @@
     {% endif %}
 
     {% if session.status == 'PENDING' or session.status == 'PROCESSING' %}
-    <div class="card mt-2">
-        <div class="card-body">
-            <div class="processing-status">
-                <div class="spinner"></div>
-                <div>
-                    <p class="text-warning">
-                        <strong>Processing in progress...</strong>
-                    </p>
-                    <p class="text-muted">Page will auto-refresh every 5 seconds. <span id="countdown">5</span>s</p>
-                </div>
+    <div class="processing-card">
+        <div class="processing-status">
+            <div class="spinner"></div>
+            <div>
+                <h3>Processing your resume...</h3>
+                <p>Our AI is analyzing the job posting and tailoring your experience. This page will auto-refresh every 5 seconds.</p>
+                <p class="countdown-text">Next refresh in <span id="countdown">5</span> seconds</p>
             </div>
         </div>
     </div>

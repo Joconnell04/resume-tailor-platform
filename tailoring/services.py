@@ -716,19 +716,20 @@ class AgentKitTailoringService:
             default_stretch=stretch_level,
         )
         
-        # Validate bullet distribution across sections
-        expected_bullets = bullets_per_section
-        section_counts = {}
-        for section in sections:
-            section_name = section.get("name", "Unknown")
-            bullet_count = len(section.get("bullets", []))
-            section_counts[section_name] = bullet_count
-            
-            if bullet_count != expected_bullets:
-                logger.warning(
-                    f"Section '{section_name}' has {bullet_count} bullets, expected {expected_bullets}. "
-                    f"Distribution: {section_counts}"
-                )
+        # STEP 2: Validate and fix section/bullet distribution
+        # Check if all requested sections are present with correct bullet counts
+        sections, flat_bullets, bullet_details = self._validate_and_fix_sections(
+            sections=sections,
+            flat_bullets=flat_bullets,
+            bullet_details=bullet_details,
+            requested_sections=requested_sections,
+            bullets_per_section=bullets_per_section,
+            job_profile=job_profile,
+            experience_payload=experience_payload,
+            parameters=parameters,
+            token_usage_totals=token_usage_totals,
+            stretch_level=stretch_level,
+        )
 
         result = TailoringResult(
             title=str(resume_payload.get("title", "")),
@@ -799,6 +800,202 @@ class AgentKitTailoringService:
         result.debug.update(debug_refs)
 
         return result
+
+    def _validate_and_fix_sections(
+        self,
+        *,
+        sections: List[Dict[str, List[str]]],
+        flat_bullets: List[str],
+        bullet_details: List[Dict[str, object]],
+        requested_sections: List[str],
+        bullets_per_section: int,
+        job_profile: JobProfile,
+        experience_payload: Dict[str, List[Dict[str, object]]],
+        parameters: Dict[str, object],
+        token_usage_totals: Dict[str, int],
+        stretch_level: int,
+    ) -> Tuple[List[Dict[str, List[str]]], List[str], List[Dict[str, object]]]:
+        """
+        Validate that all requested sections are present with the correct number of bullets.
+        Regenerate missing or incomplete sections individually.
+        
+        Returns updated (sections, flat_bullets, bullet_details) tuple.
+        """
+        # Build lookup of existing sections
+        existing_sections = {s.get("name", ""): s for s in sections}
+        existing_section_names = set(existing_sections.keys())
+        
+        # Identify missing or incomplete sections
+        sections_to_fix = []
+        for section_name in requested_sections:
+            if section_name not in existing_section_names:
+                sections_to_fix.append({
+                    "name": section_name,
+                    "reason": "missing",
+                    "current_count": 0,
+                    "needed": bullets_per_section,
+                })
+            else:
+                current_count = len(existing_sections[section_name].get("bullets", []))
+                if current_count < bullets_per_section:
+                    sections_to_fix.append({
+                        "name": section_name,
+                        "reason": "incomplete",
+                        "current_count": current_count,
+                        "needed": bullets_per_section - current_count,
+                    })
+        
+        if not sections_to_fix:
+            logger.info(f"All {len(requested_sections)} sections validated with {bullets_per_section} bullets each")
+            return sections, flat_bullets, bullet_details
+        
+        logger.info(f"Fixing {len(sections_to_fix)} sections: {[s['name'] for s in sections_to_fix]}")
+        
+        # Regenerate each problematic section individually
+        for fix_info in sections_to_fix:
+            section_name = fix_info["name"]
+            needed_bullets = fix_info["needed"] if fix_info["reason"] == "incomplete" else bullets_per_section
+            
+            logger.info(f"Regenerating section '{section_name}': need {needed_bullets} bullets")
+            
+            new_bullets, new_details, section_usage = self._generate_single_section(
+                section_name=section_name,
+                bullet_count=needed_bullets,
+                job_profile=job_profile,
+                experience_payload=experience_payload,
+                parameters=parameters,
+                stretch_level=stretch_level,
+            )
+            
+            self._merge_usage(token_usage_totals, section_usage)
+            
+            if new_bullets:
+                if fix_info["reason"] == "missing":
+                    # Add new section
+                    sections.append({"name": section_name, "bullets": new_bullets})
+                else:
+                    # Append to existing section
+                    existing_sections[section_name]["bullets"].extend(new_bullets)
+                
+                flat_bullets.extend(new_bullets)
+                
+                # Assign proper indices to new bullet details
+                section_index = next(
+                    (i for i, s in enumerate(sections) if s.get("name") == section_name),
+                    len(sections) - 1
+                )
+                for detail in new_details:
+                    detail["section"] = section_name
+                    detail["section_index"] = section_index
+                    bullet_details.append(detail)
+                
+                logger.info(f"Added {len(new_bullets)} bullets to section '{section_name}'")
+            else:
+                logger.warning(f"Failed to generate bullets for section '{section_name}'")
+        
+        # Reorder sections to match requested order
+        ordered_sections = []
+        for section_name in requested_sections:
+            for section in sections:
+                if section.get("name") == section_name:
+                    ordered_sections.append(section)
+                    break
+        
+        # Add any sections not in the requested list at the end
+        for section in sections:
+            if section not in ordered_sections:
+                ordered_sections.append(section)
+        
+        return ordered_sections, flat_bullets, bullet_details
+
+    def _generate_single_section(
+        self,
+        *,
+        section_name: str,
+        bullet_count: int,
+        job_profile: JobProfile,
+        experience_payload: Dict[str, List[Dict[str, object]]],
+        parameters: Dict[str, object],
+        stretch_level: int,
+    ) -> Tuple[List[str], List[Dict[str, object]], Dict[str, int]]:
+        """
+        Generate bullets for a single section using a focused prompt.
+        Uses lower max_output_tokens for faster response.
+        
+        Returns (bullets_list, bullet_details, token_usage)
+        """
+        stretch_guidance = self.STRETCH_LEVEL_DESCRIPTORS.get(
+            stretch_level,
+            "Balanced: Blend facts with light amplification (≤10% metric lift).",
+        )
+        
+        generation_payload = {
+            "section_name": section_name,
+            "bullet_count": bullet_count,
+            "job_profile": job_profile.to_prompt_dict(),
+            "experience_snippets": experience_payload,
+            "parameters": {
+                "tone": parameters.get("tone"),
+                "stretch_level": stretch_level,
+                "stretch_guidance": stretch_guidance,
+            },
+        }
+        
+        instructions = (
+            f"Generate EXACTLY {bullet_count} resume bullet points for the section '{section_name}'.\n\n"
+            "CRITICAL REQUIREMENTS:\n"
+            f"- Output EXACTLY {bullet_count} bullets - no more, no fewer\n"
+            "- Each bullet must start with a strong action verb\n"
+            "- Include quantifiable metrics where possible\n"
+            "- Match the job requirements and keywords naturally\n"
+            "- Use achievements from the experience_snippets provided\n"
+            "- Keep bullets between 100-180 characters for ATS optimization\n\n"
+            "OUTPUT FORMAT (JSON only, no markdown):\n"
+            "{\n"
+            '  "bullets": [\n'
+            '    {"id": "fix-1", "text": "bullet text here", "stretch": 2},\n'
+            '    ... (repeat for each bullet)\n'
+            "  ]\n"
+            "}"
+        )
+        
+        try:
+            response, _run_id, usage = self._call_openai_json(
+                instructions=instructions,
+                payload=generation_payload,
+                temperature=float(parameters.get("temperature", 0.35)),
+                max_output_tokens=800,  # Lower limit for faster single-section generation
+            )
+            
+            raw_bullets = response.get("bullets", [])
+            bullets: List[str] = []
+            details: List[Dict[str, object]] = []
+            
+            for idx, bullet_entry in enumerate(raw_bullets):
+                if isinstance(bullet_entry, dict):
+                    text = str(bullet_entry.get("text", "")).strip()
+                    bullet_id = str(bullet_entry.get("id", f"fix-{idx+1}"))
+                    stretch_val = int(bullet_entry.get("stretch", stretch_level))
+                else:
+                    text = str(bullet_entry).strip()
+                    bullet_id = f"fix-{idx+1}"
+                    stretch_val = stretch_level
+                
+                if text:
+                    bullets.append(text)
+                    details.append({
+                        "id": bullet_id,
+                        "text": text,
+                        "stretch": stretch_val,
+                        "snippet_id": "",
+                        "bullet_index": idx,
+                    })
+            
+            return bullets, details, usage
+            
+        except Exception as e:
+            logger.error(f"Failed to generate section '{section_name}': {e}")
+            return [], [], {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
     def _apply_guardrails(
         self,
@@ -1482,10 +1679,13 @@ class AgentKitTailoringService:
         """
         Create a section plan matching user-requested section names to available snippets.
         
+        IMPORTANT: All requested sections are ALWAYS included, even if no snippets match.
+        The AI will be asked to generate bullets for these sections using all available experience.
+        
         Strategy:
         1. Try exact match with bucket names in selected_snippets
         2. If no exact match, distribute available buckets across requested sections
-        3. If more sections requested than buckets available, some sections will be empty
+        3. ALL requested sections are included - none are skipped
         4. Use custom section names in output while referencing correct snippet IDs
         """
         if not layout:
@@ -1499,6 +1699,12 @@ class AgentKitTailoringService:
         seen_ids: set[str] = set()
         available_buckets = list(selected_snippets.keys())
         bucket_index = 0
+        
+        # Collect ALL snippet IDs for sections that don't have a direct match
+        all_snippet_ids = []
+        for snippets in selected_snippets.values():
+            for snippet in snippets:
+                all_snippet_ids.append(snippet.snippet_id)
 
         for section_name in layout:
             # Try exact match first
@@ -1510,13 +1716,19 @@ class AgentKitTailoringService:
                 snippets = selected_snippets.get(actual_bucket)
                 bucket_index += 1
             
-            # Skip sections with no snippets (user requested more sections than available)
+            # ALWAYS include the section - even with no dedicated snippets
+            # Use all available snippets as the pool
             if not snippets:
-                logger.warning(
-                    f"Section '{section_name}' has no snippets available. "
-                    f"Only {len(available_buckets)} bucket(s) with snippets: {available_buckets}. "
-                    f"Skipping this section."
+                logger.info(
+                    f"Section '{section_name}' has no dedicated snippets. "
+                    f"Will use full experience pool ({len(all_snippet_ids)} snippets) for generation."
                 )
+                # Include all snippet IDs so AI can draw from entire experience
+                plan.append({
+                    "name": section_name,
+                    "snippet_ids": all_snippet_ids,
+                    "use_full_pool": True,  # Flag to indicate AI should select from all
+                })
                 continue
                 
             snippet_ids = []
@@ -1526,21 +1738,21 @@ class AgentKitTailoringService:
                 seen_ids.add(snippet.snippet_id)
                 snippet_ids.append(snippet.snippet_id)
             
+            # Even if snippet_ids is empty after dedup, still include the section
             if snippet_ids:
                 plan.append({
-                    "name": section_name,  # Use user's requested name
+                    "name": section_name,
                     "snippet_ids": snippet_ids,
                 })
+            else:
+                # Use full pool for this section too
+                plan.append({
+                    "name": section_name,
+                    "snippet_ids": all_snippet_ids,
+                    "use_full_pool": True,
+                })
 
-        # Fallback: include any remaining snippets not covered by layout
-        # This happens if there are more buckets than requested sections
-        remaining = []
-        for bucket, snippets in selected_snippets.items():
-            missing_ids = [s.snippet_id for s in snippets if s.snippet_id not in seen_ids]
-            if missing_ids:
-                remaining.append({"name": bucket, "snippet_ids": missing_ids})
-
-        return plan + remaining
+        return plan
 
     def _snippets_prompt_payload(
         self,
@@ -1650,6 +1862,62 @@ class AgentKitTailoringService:
         for section in sections or []:
             bullets.extend(section.get("bullets", []))
         return bullets
+
+    def _repair_json_string(self, s: str) -> str:
+        """
+        Attempt to repair common JSON issues from LLM output.
+        Handles: unterminated strings, missing commas, trailing commas, etc.
+        """
+        import re
+        
+        # Remove any trailing incomplete content after last complete structure
+        # Find the last proper closing brace
+        brace_count = 0
+        last_valid_close = -1
+        in_string = False
+        escape_next = False
+        
+        for i, char in enumerate(s):
+            if escape_next:
+                escape_next = False
+                continue
+            if char == '\\':
+                escape_next = True
+                continue
+            if char == '"' and not escape_next:
+                in_string = not in_string
+                continue
+            if in_string:
+                continue
+            if char == '{':
+                brace_count += 1
+            elif char == '}':
+                brace_count -= 1
+                if brace_count == 0:
+                    last_valid_close = i
+        
+        if last_valid_close > 0 and last_valid_close < len(s) - 1:
+            s = s[:last_valid_close + 1]
+        
+        # Fix trailing commas before ] or }
+        s = re.sub(r',(\s*[\]\}])', r'\1', s)
+        
+        # Fix unterminated strings at end of object/array
+        # Pattern: "key": "value[no closing quote]
+        # This is tricky - try to find lines with odd number of quotes and fix
+        lines = s.split('\n')
+        fixed_lines = []
+        for line in lines:
+            # Count unescaped quotes
+            quote_count = len(re.findall(r'(?<!\\)"', line))
+            if quote_count % 2 == 1:
+                # Odd quotes - likely unterminated string
+                # Add closing quote before any trailing comma, ] or }
+                line = re.sub(r'([^"\\])(\s*[,\]\}]?\s*)$', r'\1"\2', line)
+            fixed_lines.append(line)
+        s = '\n'.join(fixed_lines)
+        
+        return s
 
     def _call_openai_json(
         self,
@@ -1762,6 +2030,13 @@ class AgentKitTailoringService:
             try:
                 return json.loads(potential_json)
             except json.JSONDecodeError as e2:
+                # Try repairing the JSON
+                try:
+                    repaired = self._repair_json_string(potential_json)
+                    return json.loads(repaired)
+                except json.JSONDecodeError:
+                    pass
+                
                 # Last resort: Try to find JSON between markdown sections
                 # Pattern: look for JSON after "**" markers or other markdown
                 lines = raw_payload.split('\n')

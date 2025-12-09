@@ -2,6 +2,7 @@
 Frontend views for tailoring app.
 """
 import logging
+import threading
 from copy import deepcopy
 from datetime import timedelta
 
@@ -30,6 +31,13 @@ def tailoring_list(request):
 
     refreshed = []
     for session in sessions:
+        # Auto-complete sessions that have bullets but are stuck in PENDING/PROCESSING
+        if session.status in [TailoringSession.Status.PENDING, TailoringSession.Status.PROCESSING]:
+            if session.generated_bullets or session.generated_sections:
+                logger.info(f"Auto-completing session {session.id} in list view - has bullets but status was {session.status}")
+                session.status = TailoringSession.Status.COMPLETED
+                session.save(update_fields=['status'])
+        
         if _rescue_stuck_session(session):
             session.refresh_from_db()
         refreshed.append(session)
@@ -41,6 +49,13 @@ def tailoring_list(request):
 def tailoring_detail(request, session_id):
     """Display tailoring session details."""
     session = get_object_or_404(TailoringSession, id=session_id, user=request.user)
+    
+    # Auto-complete sessions that have bullets but are stuck in PENDING/PROCESSING
+    if session.status in [TailoringSession.Status.PENDING, TailoringSession.Status.PROCESSING]:
+        if session.generated_bullets or session.generated_sections:
+            logger.info(f"Auto-completing session {session.id} - has bullets but status was {session.status}")
+            session.status = TailoringSession.Status.COMPLETED
+            session.save(update_fields=['status'])
     
     # Check for stuck sessions and attempt rescue
     if _rescue_stuck_session(session):
@@ -244,55 +259,37 @@ def _dispatch_tailoring_task(
     allow_inline: bool = True,
 ) -> str:
     """
-    Try to enqueue the tailoring task using Django-Q.
-    Falls back to inline execution when queueing fails.
+    Dispatch the tailoring task in a background thread.
+    This ensures the HTTP response returns immediately so the user
+    sees the waiting page right away instead of the page hanging.
 
     Returns:
-        "queued" if the task was enqueued, "inline" if executed immediately.
+        "dispatched" - task was started in background thread
     """
-    try:
-        task_id = async_task(
-            'tailoring.tasks.process_tailoring_session',
-            session.id,
-        )
-        logger.info(f"Queued session {session.id} via Django-Q (task_id: {task_id})")
-        return "queued"
-    except Exception as exc:
-        logger.warning(
-            "Queue unavailable for session %s. Falling back to inline execution. %s",
-            session.id,
-            exc,
-        )
-        if allow_inline:
+    def run_task():
+        """Run the task in a background thread."""
+        try:
+            # Close any existing DB connections to avoid sharing across threads
+            from django.db import connection
+            connection.close()
+            process_tailoring_session(session.id)
+        except Exception as e:
+            logger.error(f"Background task failed for session {session.id}: {e}")
             try:
-                process_tailoring_session(session.id)
-                if request:
-                    messages.info(
-                        request,
-                        'Queue is offline, so tailoring ran immediately.',
-                    )
-                return "inline"
-            except Exception as inline_exc:  # noqa: BLE001
-                _mark_session_failed(
-                    session,
-                    "Tailoring session could not run because the queue is unavailable.",
-                    append_debug=str(inline_exc),
-                )
-                raise inline_exc
-
-        _mark_session_failed(
-            session,
-            "Tailoring session could not be queued.",
-            append_debug=str(exc),
-        )
-        raise exc
-    except Exception as exc:  # noqa: BLE001
-        _mark_session_failed(
-            session,
-            "Unexpected error when starting tailoring session.",
-            append_debug=str(exc),
-        )
-        raise exc
+                # Refresh session and mark failed
+                from django.db import connection
+                connection.close()
+                sess = TailoringSession.objects.get(id=session.id)
+                if sess.status not in [TailoringSession.Status.COMPLETED, TailoringSession.Status.FAILED]:
+                    _mark_session_failed(sess, str(e))
+            except Exception:
+                pass
+    
+    # Start task in background thread so HTTP response returns immediately
+    thread = threading.Thread(target=run_task, daemon=True)
+    thread.start()
+    logger.info(f"Dispatched session {session.id} in background thread")
+    return "dispatched"
 
 
 def _mark_session_failed(
