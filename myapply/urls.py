@@ -31,6 +31,7 @@ urlpatterns = [
     path('jobs/', include('jobs.frontend_urls')),
     path('tailoring/', include('tailoring.frontend_urls')),
     path('profile/', include('profiles.frontend_urls')),
+    path('accounts/', include('accounts.urls')),
     
     # API views
     path('admin/', admin.site.urls),

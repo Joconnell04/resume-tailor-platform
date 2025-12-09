@@ -11,7 +11,9 @@ from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from .models import User
 from .serializers import UserSerializer
 from .permissions import IsAdminOrSelf
-
+from django.shortcuts import render, redirect
+from .forms import CustomUserCreationForm
+from django.contrib import messages
 
 class UserViewSet(viewsets.ModelViewSet):
     """
@@ -46,3 +48,17 @@ class UserViewSet(viewsets.ModelViewSet):
         """
         serializer = self.get_serializer(request.user)
         return Response(serializer.data)
+
+
+def signup(request):
+    if request.method == "POST":
+        form = CustomUserCreationForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Account created successfully! Please log in.")
+            return redirect("login")  # adjust if your login view is elsewhere
+    else:
+        form = CustomUserCreationForm()
+
+    # Pass the form directly
+    return render(request, "accounts/signup.html", {"form": form})
